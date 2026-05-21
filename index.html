@@ -43,17 +43,8 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnb
       const url = `${GAS_URL}?worker=${encodeURIComponent(currentWorker)}`
         + `&uid=${encodeURIComponent(uid)}`
         + `&terminal=${encodeURIComponent(TERMINAL)}`;
-      fetch(url)
-        .then(() => {
-          document.getElementById('status').textContent = '✅ 記録完了';
-          document.getElementById('msg').textContent
-            = currentWorker + ' / ' + uid;
-          setTimeout(() => {
-            document.getElementById('status').textContent = 'コンテナをタッチ';
-            document.getElementById('msg').textContent = '';
-          }, 2000);
-        });
-      history.replaceState({}, '', location.pathname);
+      // GASページに直接飛んで記録、戻ってくる
+      location.href = url;
     }
 
     // 端末セットアップ

@@ -1,0 +1,85 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2487.7">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px '.AppleSystemUIFontMonospaced'; color: #101010; -webkit-text-stroke: #101010; background-color: #f2f1e9}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px '.AppleSystemUIFontMonospaced'; color: #101010; -webkit-text-stroke: #101010; background-color: #f2f1e9; min-height: 15.0px}
+    span.s1 {font-kerning: none}
+  </style>
+</head>
+<body>
+<p class="p1"><span class="s1">&lt;!DOCTYPE html&gt;</span></p>
+<p class="p1"><span class="s1">&lt;html lang="ja"&gt;</span></p>
+<p class="p1"><span class="s1">&lt;head&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;meta charset="UTF-8"&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;meta name="viewport" content="width=device-width,initial-scale=1"&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;title&gt;収穫記録&lt;/title&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/head&gt;</span></p>
+<p class="p1"><span class="s1">&lt;body style="font-family:sans-serif;text-align:center;padding:2rem"&gt;</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;h2 id="status"&gt;作業者カードをタッチ&lt;/h2&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;p id="worker-name" style="font-size:1.4rem;font-weight:bold;color:#1a73e8"&gt;&lt;/p&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;p id="msg" style="color:#555"&gt;&lt;/p&gt;</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;script&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>// ★ここを書き換えてください</span></p>
+<p class="p1"><span class="s1">const GAS_URL = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const TERMINAL <span class="Apple-converted-space">  </span>= localStorage.getItem('terminal') || '端末??';</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>let currentWorker = localStorage.getItem('worker') || '';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (currentWorker) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('worker-name').textContent = currentWorker;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('status').textContent = 'コンテナをタッチ';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>// NFCタグをタッチした時（URLにパラメータが付く）</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const params = new URLSearchParams(location.search);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const w <span class="Apple-converted-space">  </span>= params.get('worker');</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const uid = params.get('uid');</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (w) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>// 作業者カードをタッチ</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>currentWorker = w;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>localStorage.setItem('worker', w);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('worker-name').textContent = w;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('status').textContent = 'コンテナをタッチ';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('msg').textContent = w + ' さん、登録完了';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>history.replaceState({}, '', location.pathname);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (uid &amp;&amp; currentWorker) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>// コンテナをタッチ → 記録送信</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('status').textContent = '送信中...';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>const url = `${GAS_URL}?worker=${encodeURIComponent(currentWorker)}`</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>+ `&amp;uid=${encodeURIComponent(uid)}`</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>+ `&amp;terminal=${encodeURIComponent(TERMINAL)}`;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>fetch(url)</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.then(() =&gt; {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>document.getElementById('status').textContent = '✅ 記録完了';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>document.getElementById('msg').textContent</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>= currentWorker + ' / ' + uid;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>setTimeout(() =&gt; {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>document.getElementById('status').textContent = 'コンテナをタッチ';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>document.getElementById('msg').textContent = '';</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>}, 2000);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>});</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>history.replaceState({}, '', location.pathname);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p2"><span class="s1"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>// 端末セットアップ</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>const setup = params.get('setup');</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>if (setup) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>localStorage.setItem('terminal', setup);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>document.getElementById('status').textContent</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>= '端末番号をセット: ' + setup;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>&lt;/script&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/body&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/html&gt;</span></p>
+</body>
+</html>

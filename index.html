@@ -10,50 +10,74 @@
   <h2 id="status">作業者カードをタッチ</h2>
   <p id="worker-name" style="font-size:1.4rem;font-weight:bold;color:#1a73e8"></p>
   <p id="msg" style="color:#555"></p>
+  <button id="scan-btn" style="display:none;margin-top:1rem;padding:12px 24px;
+    background:#0f9d58;color:white;border:none;border-radius:8px;
+    font-size:16px;cursor:pointer">
+    コンテナをスキャン
+  </button>
 
   <script>
-    // ★ここを書き換えてください
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';
-    const TERMINAL   = localStorage.getItem('terminal') || '端末??';
+    const GAS_URL  = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';
+    const TERMINAL = localStorage.getItem('terminal') || '端末??';
 
     let currentWorker = localStorage.getItem('worker') || '';
+
+    // 起動時に作業者が設定済みなら表示
     if (currentWorker) {
       document.getElementById('worker-name').textContent = currentWorker;
-      document.getElementById('status').textContent = 'コンテナをタッチ';
+      document.getElementById('status').textContent = 'コンテナをスキャン';
+      document.getElementById('scan-btn').style.display = 'inline-block';
     }
 
-    // NFCタグをタッチした時（URLにパラメータが付く）
+    // URLパラメータで作業者セット
     const params = new URLSearchParams(location.search);
-    const w   = params.get('worker');
-    const uid = params.get('uid');
-
-    if (w) {
-      // 作業者カードをタッチ
-      currentWorker = w;
-      localStorage.setItem('worker', w);
-      document.getElementById('worker-name').textContent = w;
-      document.getElementById('status').textContent = 'コンテナをタッチ';
-      document.getElementById('msg').textContent = w + ' さん、登録完了';
-      history.replaceState({}, '', location.pathname);
-    }
-
-    if (uid && currentWorker) {
-      // コンテナをタッチ → 記録送信
-      document.getElementById('status').textContent = '送信中...';
-      const url = `${GAS_URL}?worker=${encodeURIComponent(currentWorker)}`
-        + `&uid=${encodeURIComponent(uid)}`
-        + `&terminal=${encodeURIComponent(TERMINAL)}`;
-      // GASページに直接飛んで記録、戻ってくる
-      location.href = url;
-    }
-
-    // 端末セットアップ
+    const w = params.get('worker');
     const setup = params.get('setup');
+
     if (setup) {
       localStorage.setItem('terminal', setup);
       document.getElementById('status').textContent
         = '端末番号をセット: ' + setup;
+      history.replaceState({}, '', location.pathname);
     }
+
+    if (w) {
+      currentWorker = w;
+      localStorage.setItem('worker', w);
+      document.getElementById('worker-name').textContent = w;
+      document.getElementById('status').textContent = 'コンテナをスキャン';
+      document.getElementById('scan-btn').style.display = 'inline-block';
+      document.getElementById('msg').textContent = w + ' さん、登録完了';
+      history.replaceState({}, '', location.pathname);
+    }
+
+    // Web NFC APIでコンテナUIDを読み取る
+    document.getElementById('scan-btn').addEventListener('click', async () => {
+      if (!('NDEFReader' in window)) {
+        alert('このブラウザはWeb NFCに対応していません。\nAndroid Chromeをお使いください。');
+        return;
+      }
+      if (!currentWorker) {
+        alert('先に作業者カードをタッチしてください。');
+        return;
+      }
+      try {
+        const reader = new NDEFReader();
+        await reader.scan();
+        document.getElementById('status').textContent = 'コンテナに当ててください…';
+
+        reader.onreading = ({ serialNumber }) => {
+          const uid = serialNumber;
+          document.getElementById('status').textContent = '送信中...';
+          const url = `${GAS_URL}?worker=${encodeURIComponent(currentWorker)}`
+            + `&uid=${encodeURIComponent(uid)}`
+            + `&terminal=${encodeURIComponent(TERMINAL)}`;
+          location.href = url;
+        };
+      } catch (e) {
+        document.getElementById('status').textContent = 'エラー: ' + e.message;
+      }
+    });
   </script>
 </body>
 </html>

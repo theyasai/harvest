@@ -299,7 +299,10 @@ def mode_worker(reader):
 # ------------------------------------------------------------------
 def mode_device(reader):
     n = ask_int("端末番号", 1, 1, DEVICE_COUNT)
+    key = input("合言葉（Code.gs の ACCESS_KEY と同じもの）: ").strip()
     url = BASE_URL + "?device=%02d" % n
+    if key:
+        url += "&key=" + urllib.parse.quote(key)
     print("▶ 端末%02d 設定カードを置いてください…" % n, end="", flush=True)
     write_one(reader, "端末設定", "%02d" % n, url)
 

@@ -12,6 +12,9 @@
 const SPREADSHEET_ID = '';
 const SHEET_NAME = '記録';
 const TZ = 'Asia/Tokyo';
+// 合言葉。iPhone とダッシュボードから送られてくる合言葉がこれと一致しないと、記録も閲覧もできない。
+// （GitHub には載せないこと）
+const ACCESS_KEY = 'ここに合言葉';
 // 記録完了画面の「戻る」ボタンの行き先
 const BACK_URL = 'https://theyasai.github.io/harvest/';
 // 同じコンテナを何秒以内に再タッチしたら「二重タッチ」とみなして記録しないか
@@ -24,7 +27,12 @@ const HEADERS = ['日時', '作業者', 'コンテナID', '端末', '受信日�
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.action === 'record') return record_(p);
+  const keyOk = ACCESS_KEY && ACCESS_KEY !== 'ここに合言葉' && p.key === ACCESS_KEY;
+  if (p.action === 'record') {
+    if (!keyOk) return page_('ng', '記録できませんでした', '合言葉が違います。管理者に「設定用リンク」をもらってください', '', '');
+    return record_(p);
+  }
+  if (p.action === 'data' && !keyOk) return jsonOut_(p, { error: 'key' });
   if (p.action === 'data') return data_(p);
   return ContentService.createTextOutput('harvest GAS OK');
 }
@@ -186,12 +194,15 @@ function data_(p) {
   }
   out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
 
-  const json = JSON.stringify({
+  return jsonOut_(p, {
     date: date,
     updated: Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'),
     rows: out // [時刻, 作業者, コンテナID, 端末]
   });
+}
 
+function jsonOut_(p, obj) {
+  const json = JSON.stringify(obj);
   // JSONP（<script> タグで読み込む方式。CORS の制限を受けない）
   const cb = String(p.callback || '');
   if (/^[A-Za-z_$][\w$]{0,50}$/.test(cb)) {

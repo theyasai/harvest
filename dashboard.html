@@ -106,6 +106,7 @@
       <input type="date" id="date">
       <button type="button" id="todayBtn">今日</button>
       <button type="button" id="reloadBtn">更新</button>
+      <button type="button" id="keyBtn">合言葉</button>
       <label><input type="checkbox" id="auto" checked> 自動更新（30秒）</label>
       <span class="state" id="state">読み込み中…</span>
     </div>
@@ -203,12 +204,34 @@ function jsonp(url) {
   });
 }
 
+// 合言葉（GitHub には書かず、このパソコンのブラウザの中だけに保存する）
+const KEY_ACCESS = 'harvest_key';
+function getKey() { try { return localStorage.getItem(KEY_ACCESS); } catch (e) { return null; } }
+function setKey(k) { try { localStorage.setItem(KEY_ACCESS, k); } catch (e) {} }
+function askKey() {
+  const k = (prompt('合言葉を入力してください') || '').trim();
+  if (k) setKey(k);
+  return k;
+}
+(function readKeyFromUrl() {
+  const k = new URLSearchParams(location.search).get('key');
+  if (k) { setKey(k); history.replaceState(null, '', location.pathname); }
+})();
+
 async function load() {
   const date = $('date').value || todayStr();
+  const key = getKey() || askKey();
+  if (!key) {
+    $('state').className = 'state err';
+    $('state').textContent = '合言葉が未設定です（「合言葉」ボタンから入力）';
+    return;
+  }
   $('state').className = 'state';
   $('state').textContent = '読み込み中…';
   try {
-    const data = await jsonp(GAS_URL + '?action=data&date=' + encodeURIComponent(date) + '&_=' + Date.now());
+    const data = await jsonp(GAS_URL + '?action=data&date=' + encodeURIComponent(date) +
+      '&key=' + encodeURIComponent(key) + '&_=' + Date.now());
+    if (data.error === 'key') throw new Error('合言葉が違います（「合言葉」ボタンから入力し直してください）');
     render(data);
     $('state').textContent = '最終更新 ' + data.updated.slice(11);
   } catch (e) {
@@ -375,6 +398,7 @@ $('date').value = todayStr();
 $('date').addEventListener('change', () => { lastRowCount = -1; load(); });
 $('todayBtn').addEventListener('click', () => { $('date').value = todayStr(); lastRowCount = -1; load(); });
 $('reloadBtn').addEventListener('click', load);
+$('keyBtn').addEventListener('click', () => { if (askKey()) load(); });
 $('auto').addEventListener('change', setAuto);
 setAuto();
 load();

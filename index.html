@@ -1,83 +1,327 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>収穫記録</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>収穫記録</title>
+<style>
+  :root {
+    --bg: #f4f6f2;
+    --card: #ffffff;
+    --text: #1d1f1b;
+    --sub: #5b6157;
+    --ok: #1f8a3b;
+    --warn: #c77700;
+    --ng: #c62828;
+    --info: #2a78d6;
+    --line: #dde2d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141613;
+      --card: #1f221d;
+      --text: #f0f2ec;
+      --sub: #b3b9ac;
+      --line: #33382f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    min-height: 100vh;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 15px; color: var(--sub); margin-bottom: 12px;
+  }
+  .badge {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; font-weight: 600;
+  }
+  .card {
+    background: var(--card); border-radius: 20px; padding: 28px 20px;
+    text-align: center; border: 4px solid var(--line);
+  }
+  .card.ok   { border-color: var(--ok); }
+  .card.warn { border-color: var(--warn); }
+  .card.ng   { border-color: var(--ng); }
+  .card.info { border-color: var(--info); }
+  .icon { font-size: 64px; line-height: 1; margin-bottom: 12px; }
+  h1 { font-size: 26px; margin: 0 0 12px; }
+  .big { font-size: 40px; font-weight: 800; margin: 8px 0; word-break: break-all; }
+  .msg { font-size: 18px; color: var(--sub); line-height: 1.6; margin: 0; }
+  .status {
+    margin-top: 16px; background: var(--card); border-radius: 16px;
+    padding: 16px; border: 1px solid var(--line); font-size: 16px; line-height: 1.9;
+  }
+  .status b { font-size: 18px; }
+  .section-title { font-size: 14px; color: var(--sub); margin: 24px 0 8px; }
+  .devices { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  button, .btn {
+    appearance: none; -webkit-appearance: none;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 12px; padding: 14px 0; font-size: 18px; font-weight: 700;
+    width: 100%; text-align: center; text-decoration: none; display: block;
+  }
+  button.active { background: var(--info); color: #fff; border-color: var(--info); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .spinner {
+    width: 56px; height: 56px; margin: 0 auto 16px;
+    border: 6px solid var(--line); border-top-color: var(--info);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  [hidden] { display: none !important; }
+</style>
 </head>
-<body style="font-family:sans-serif;text-align:center;padding:2rem">
+<body>
+<div class="wrap">
 
-  <h2 id="status">作業者カードをタッチ</h2>
-  <p id="worker-name" style="font-size:1.4rem;font-weight:bold;color:#1a73e8"></p>
-  <p id="msg" style="color:#555"></p>
-  <button id="scan-btn" style="display:none;margin-top:1rem;padding:12px 24px;
-    background:#0f9d58;color:white;border:none;border-radius:8px;
-    font-size:16px;cursor:pointer">
-    コンテナをスキャン
-  </button>
+  <div class="topbar">
+    <span>収穫記録</span>
+    <span class="badge" id="deviceBadge">端末 --</span>
+  </div>
 
-  <script>
-    const GAS_URL  = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';
-    const TERMINAL = localStorage.getItem('terminal') || '端末??';
+  <!-- メイン表示（状況に応じて中身が変わる） -->
+  <div class="card" id="card">
+    <div id="spinner" class="spinner" hidden></div>
+    <div class="icon" id="icon"></div>
+    <h1 id="title"></h1>
+    <div class="big" id="big"></div>
+    <p class="msg" id="msg"></p>
+  </div>
 
-    let currentWorker = localStorage.getItem('worker') || '';
+  <!-- 現在の設定 -->
+  <div class="status" id="status">
+    作業者：<b id="nowWorker">未設定</b><br>
+    端末番号：<b id="nowDevice">未設定</b>
+  </div>
 
-    // 起動時に作業者が設定済みなら表示
-    if (currentWorker) {
-      document.getElementById('worker-name').textContent = currentWorker;
-      document.getElementById('status').textContent = 'コンテナをスキャン';
-      document.getElementById('scan-btn').style.display = 'inline-block';
-    }
+  <!-- 設定（ホーム画面のときだけ表示） -->
+  <div id="settings" hidden>
+    <div class="section-title">この iPhone の端末番号（最初に1回だけ設定）</div>
+    <div class="devices" id="deviceButtons"></div>
 
-    // URLパラメータで作業者セット
-    const params = new URLSearchParams(location.search);
-    const w = params.get('worker');
-    const setup = params.get('setup');
+    <div class="section-title">その他</div>
+    <div class="row">
+      <button type="button" id="clearWorker">作業者を解除</button>
+      <a class="btn" href="dashboard.html">ダッシュボード</a>
+    </div>
+  </div>
 
-    if (setup) {
-      localStorage.setItem('terminal', setup);
-      document.getElementById('status').textContent
-        = '端末番号をセット: ' + setup;
-      history.replaceState({}, '', location.pathname);
-    }
+</div>
 
-    if (w) {
-      currentWorker = w;
-      localStorage.setItem('worker', w);
-      document.getElementById('worker-name').textContent = w;
-      document.getElementById('status').textContent = 'コンテナをスキャン';
-      document.getElementById('scan-btn').style.display = 'inline-block';
-      document.getElementById('msg').textContent = w + ' さん、登録完了';
-      history.replaceState({}, '', location.pathname);
-    }
+<script>
+// ====== 設定 ======================================================
+// GAS（Google Apps Script）のウェブアプリURL
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';
+// 作業者カードをタッチしてから何時間で作業者設定を無効にするか（翌日の付け忘れ防止）
+const WORKER_EXPIRE_HOURS = 12;
+// 端末の台数
+const DEVICE_COUNT = 5;
+// コンテナ番号の範囲
+const CONTAINER_MIN = 1;
+const CONTAINER_MAX = 1000;
+// ================================================================
 
-    // Web NFC APIでコンテナUIDを読み取る
-    document.getElementById('scan-btn').addEventListener('click', async () => {
-      if (!('NDEFReader' in window)) {
-        alert('このブラウザはWeb NFCに対応していません。\nAndroid Chromeをお使いください。');
-        return;
-      }
-      if (!currentWorker) {
-        alert('先に作業者カードをタッチしてください。');
-        return;
-      }
-      try {
-        const reader = new NDEFReader();
-        await reader.scan();
-        document.getElementById('status').textContent = 'コンテナに当ててください…';
+// ページが開いた瞬間＝NFCをタッチした瞬間 の時刻を最初に記録しておく
+const touchTime = new Date();
 
-        reader.onreading = ({ serialNumber }) => {
-          const uid = serialNumber;
-          document.getElementById('status').textContent = '送信中...';
-          const url = `${GAS_URL}?worker=${encodeURIComponent(currentWorker)}`
-            + `&uid=${encodeURIComponent(uid)}`
-            + `&terminal=${encodeURIComponent(TERMINAL)}`;
-          location.href = url;
-        };
-      } catch (e) {
-        document.getElementById('status').textContent = 'エラー: ' + e.message;
-      }
-    });
-  </script>
+const KEY_WORKER = 'harvest_worker';
+const KEY_WORKER_TIME = 'harvest_worker_time';
+const KEY_DEVICE = 'harvest_device';
+
+// localStorage（iPhoneの中にデータを保存する仕組み）を安全に使うための関数
+function load(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function save(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+}
+function remove(key) {
+  try { localStorage.removeItem(key); } catch (e) {}
+}
+
+function getDevice() { return load(KEY_DEVICE); }
+
+// 有効な作業者名を返す（期限切れなら null）
+function getWorker() {
+  const name = load(KEY_WORKER);
+  const time = Number(load(KEY_WORKER_TIME));
+  if (!name || !time) return null;
+  if (Date.now() - time > WORKER_EXPIRE_HOURS * 3600 * 1000) return null;
+  return name;
+}
+
+// ---- 画面表示 ----
+const $ = (id) => document.getElementById(id);
+
+function show(type, icon, title, big, msg) {
+  $('card').className = 'card ' + (type || '');
+  $('spinner').hidden = type !== 'sending';
+  $('icon').hidden = type === 'sending';
+  $('icon').textContent = icon || '';
+  $('title').textContent = title || '';
+  $('big').textContent = big || '';
+  $('big').hidden = !big;
+  $('msg').textContent = msg || '';
+}
+
+function refreshStatus() {
+  const w = getWorker();
+  const d = getDevice();
+  $('nowWorker').textContent = w || '未設定';
+  $('nowDevice').textContent = d ? '端末' + d : '未設定';
+  $('deviceBadge').textContent = d ? '端末' + d : '端末 --';
+}
+
+function buildDeviceButtons() {
+  const box = $('deviceButtons');
+  box.innerHTML = '';
+  const current = getDevice();
+  for (let i = 1; i <= DEVICE_COUNT; i++) {
+    const no = String(i).padStart(2, '0');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = no;
+    if (no === current) b.className = 'active';
+    b.onclick = () => {
+      save(KEY_DEVICE, no);
+      buildDeviceButtons();
+      refreshStatus();
+      showHome();
+    };
+    box.appendChild(b);
+  }
+}
+
+function showHome() {
+  $('settings').hidden = false;
+  buildDeviceButtons();
+  const w = getWorker();
+  if (!getDevice()) {
+    show('warn', '⚙️', '端末番号を設定してください', '', '下のボタンから、この iPhone の番号を選んでください。');
+  } else if (!w) {
+    show('info', '🪪', '作業者カードをタッチ', '', '自分の NFC カードを iPhone の上部にかざしてください。');
+  } else {
+    show('ok', '🧺', '準備OK', w, 'コンテナの NFC シールをタッチすると記録されます。');
+  }
+}
+
+// ---- 各処理 ----
+
+// 端末番号の設定（URL ?device=01 で開いた場合）
+function handleDevice(value) {
+  const n = parseInt(String(value).replace(/\D/g, ''), 10);
+  if (!(n >= 1 && n <= DEVICE_COUNT)) {
+    show('ng', '❌', '端末番号が正しくありません', value, '01〜' + String(DEVICE_COUNT).padStart(2, '0') + ' を指定してください。');
+    return;
+  }
+  const no = String(n).padStart(2, '0');
+  save(KEY_DEVICE, no);
+  show('ok', '✅', '端末番号を設定しました', '端末' + no, '');
+}
+
+// 作業者カードをタッチした場合（URL ?w=山田太郎）
+function handleWorker(name) {
+  name = name.trim().slice(0, 30);
+  if (!name) {
+    show('ng', '❌', '作業者カードが読めません', '', 'カードの書き込み内容を確認してください。');
+    return;
+  }
+  const ok = save(KEY_WORKER, name) && save(KEY_WORKER_TIME, String(Date.now()));
+  if (!ok) {
+    show('ng', '❌', '保存できませんでした', '', 'Safari の「プライベートブラウズ」をオフにしてください。');
+    return;
+  }
+  show('ok', '👤', '作業者をセットしました', name, 'つづけてコンテナの NFC シールをタッチしてください。');
+}
+
+// コンテナシールをタッチした場合（URL ?c=0001）
+function handleContainer(value) {
+  const n = parseInt(value, 10);
+  if (!/^\d{1,4}$/.test(value) || !(n >= CONTAINER_MIN && n <= CONTAINER_MAX)) {
+    show('ng', '❌', 'コンテナ番号が正しくありません', value, 'シールの書き込み内容を確認してください。');
+    return;
+  }
+  const container = String(n).padStart(4, '0');
+
+  const device = getDevice();
+  if (!device) {
+    $('settings').hidden = false;
+    buildDeviceButtons();
+    show('ng', '⚙️', '端末番号が未設定です', 'No.' + container, '下のボタンで端末番号を選んでから、もう一度コンテナをタッチしてください。（まだ記録されていません）');
+    return;
+  }
+
+  const worker = getWorker();
+  if (!worker) {
+    show('ng', '🪪', '作業者が未設定です', 'No.' + container, '先に自分の作業者カードをタッチしてから、もう一度コンテナをタッチしてください。（まだ記録されていません）');
+    return;
+  }
+
+  // 記録ID：同じ記録が二重に登録されるのを防ぐための目印
+  const rid = touchTime.getTime().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
+  const q = new URLSearchParams({
+    action: 'record',
+    t: String(touchTime.getTime()),
+    worker: worker,
+    container: container,
+    device: device,
+    rid: rid
+  });
+
+  show('sending', '', '記録しています…', 'No.' + container, worker + ' さん');
+
+  // GAS へ移動して記録する（fetch ではなく画面移動なので CORS の問題が起きない）
+  location.href = GAS_URL + '?' + q.toString();
+}
+
+$('clearWorker').onclick = () => {
+  remove(KEY_WORKER);
+  remove(KEY_WORKER_TIME);
+  refreshStatus();
+  showHome();
+};
+
+// ---- ここから実行 ----
+(function main() {
+  const params = new URLSearchParams(location.search);
+  // ?worker= と ?setup= は以前のバージョンで作ったカード用
+  const device = params.get('device') ?? params.get('setup');
+  const w = params.get('w') ?? params.get('worker');
+  const c = params.get('c');
+
+  // 読み取ったら URL からパラメータを消す。
+  // （「戻る」や再読み込みで同じコンテナが二重に送信されるのを防ぐため）
+  if (location.search) {
+    history.replaceState(null, '', location.pathname);
+  }
+
+  if (device !== null) {
+    handleDevice(device);
+  } else if (w !== null) {
+    handleWorker(w);
+  } else if (c !== null) {
+    handleContainer(c.trim());
+  } else {
+    showHome();
+  }
+  refreshStatus();
+})();
+
+// Safari の「戻る」でページがキャッシュから表示された場合はホーム画面に戻す
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) { refreshStatus(); showHome(); }
+});
+</script>
 </body>
 </html>

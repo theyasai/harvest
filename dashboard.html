@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>収穫ダッシュボード</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f4f1;
+    --surface: #fcfcfb;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #8a8984;
+    --grid: #e6e5e0;
+    --line: #dddcd6;
+    --series-1: #2a78d6;
+    --hover: #f0efea;
+    --ok: #1f8a3b;
+    --ng: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #111110;
+      --surface: #1a1a19;
+      --text: #f0efec;
+      --text-2: #c3c2b7;
+      --muted: #8f8e86;
+      --grid: #2c2c2a;
+      --line: #33332f;
+      --series-1: #3987e5;
+      --hover: #242422;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --muted: #8f8e86;
+    --grid: #2c2c2a;
+    --line: #33332f;
+    --series-1: #3987e5;
+    --hover: #242422;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;
+    padding: 16px;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; color: var(--text-2); }
+  .controls input[type=date], .controls button {
+    font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  }
+  .controls button { cursor: pointer; }
+  .controls label { display: flex; align-items: center; gap: 4px; }
+  .state { font-size: 13px; color: var(--muted); }
+  .state.err { color: var(--ng); }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .tile .label { font-size: 13px; color: var(--text-2); }
+  .tile .value { font-size: 32px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .value small { font-size: 15px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .chart-box { position: relative; height: 300px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
+  th { color: var(--text-2); font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; }
+  tbody tr:hover { background: var(--hover); }
+  .bar-cell { width: 40%; }
+  .mini-bar { height: 8px; border-radius: 4px; background: var(--series-1); min-width: 2px; }
+  .new { animation: flash 2s ease-out; }
+  @keyframes flash { from { background: rgba(42,120,214,.25); } to { background: transparent; } }
+
+  @media (max-width: 800px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .grid2 { grid-template-columns: 1fr; }
+    .tile .value { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🧺 収穫ダッシュボード</h1>
+    <div class="controls">
+      <input type="date" id="date">
+      <button type="button" id="todayBtn">今日</button>
+      <button type="button" id="reloadBtn">更新</button>
+      <label><input type="checkbox" id="auto" checked> 自動更新（30秒）</label>
+      <span class="state" id="state">読み込み中…</span>
+    </div>
+  </header>
+
+  <section class="tiles">
+    <div class="tile"><div class="label">合計ケース数</div><div class="value" id="kTotal">-</div></div>
+    <div class="tile"><div class="label">作業者数</div><div class="value" id="kWorkers">-</div></div>
+    <div class="tile"><div class="label">直近1時間</div><div class="value" id="kHour">-</div></div>
+    <div class="tile"><div class="label">最終記録</div><div class="value" id="kLast">-</div></div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>作業者別ケース数</h2>
+      <div class="chart-box"><canvas id="workerChart" aria-label="作業者別ケース数のグラフ" role="img"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>時間帯別ケース数（全員合計）</h2>
+      <div class="chart-box"><canvas id="hourChart" aria-label="時間帯別ケース数のグラフ" role="img"></canvas></div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>作業者ランキング</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>順位</th><th>作業者</th><th class="num">ケース</th><th class="bar-cell"></th>
+            <th>最初</th><th>最後</th><th class="num">ケース/時</th>
+          </tr></thead>
+          <tbody id="rankBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>最新の記録（50件）</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>時刻</th><th>作業者</th><th>コンテナ</th><th>端末</th></tr></thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>端末別ケース数</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>端末</th><th class="num">ケース</th><th class="bar-cell"></th><th>最終記録</th></tr></thead>
+        <tbody id="deviceBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ====== 設定 ======================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyLxPDiPKWvYxxXo_P4ibnbl3oPK_f8g7qHQUQfPDxnideCc3L19mDUtHw_jkWVqigf/exec';
+const REFRESH_SECONDS = 30;
+// ================================================================
+
+const $ = (id) => document.getElementById(id);
+let workerChart = null, hourChart = null, timer = null;
+let lastRowCount = -1;
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// GAS からデータを取得（JSONP 方式：<script> タグで読み込むので CORS の制限を受けない）
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cb = 'cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const s = document.createElement('script');
+    const tm = setTimeout(() => { cleanup(); reject(new Error('タイムアウト')); }, 30000);
+    function cleanup() { clearTimeout(tm); delete window[cb]; s.remove(); }
+    window[cb] = (data) => { cleanup(); resolve(data); };
+    s.onerror = () => { cleanup(); reject(new Error('読み込み失敗')); };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+
+async function load() {
+  const date = $('date').value || todayStr();
+  $('state').className = 'state';
+  $('state').textContent = '読み込み中…';
+  try {
+    const data = await jsonp(GAS_URL + '?action=data&date=' + encodeURIComponent(date) + '&_=' + Date.now());
+    render(data);
+    $('state').textContent = '最終更新 ' + data.updated.slice(11);
+  } catch (e) {
+    $('state').className = 'state err';
+    $('state').textContent = 'データ取得エラー：' + e.message;
+  }
+}
+
+function toSec(hms) {
+  const [h, m, s] = hms.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+function render(data) {
+  const rows = data.rows; // [時刻, 作業者, コンテナ, 端末]
+  const isToday = data.date === todayStr();
+
+  // ---- 集計 ----
+  const byWorker = new Map();
+  const byDevice = new Map();
+  const byHour = new Array(24).fill(0);
+  rows.forEach(([t, w, c, d]) => {
+    if (!byWorker.has(w)) byWorker.set(w, { name: w, count: 0, first: t, last: t });
+    const o = byWorker.get(w);
+    o.count++; if (t < o.first) o.first = t; if (t > o.last) o.last = t;
+
+    if (!byDevice.has(d)) byDevice.set(d, { count: 0, last: t });
+    const dv = byDevice.get(d);
+    dv.count++; if (t > dv.last) dv.last = t;
+
+    byHour[Number(t.slice(0, 2))]++;
+  });
+  const ranking = [...byWorker.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'));
+
+  // ---- 数値タイル ----
+  $('kTotal').innerHTML = rows.length + '<small>ケース</small>';
+  $('kWorkers').innerHTML = byWorker.size + '<small>人</small>';
+  if (isToday) {
+    const now = new Date();
+    const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+    const hourCount = rows.filter((r) => nowSec - toSec(r[0]) <= 3600 && nowSec >= toSec(r[0])).length;
+    $('kHour').innerHTML = hourCount + '<small>ケース</small>';
+  } else {
+    $('kHour').textContent = '-';
+  }
+  $('kLast').textContent = rows.length ? rows[rows.length - 1][0].slice(0, 5) : '-';
+
+  // ---- グラフ（Chart.js が読み込めなかった場合はグラフだけ省略） ----
+  if (window.Chart) {
+    drawWorkerChart(ranking);
+    drawHourChart(byHour);
+  }
+
+  // ---- ランキング表 ----
+  const max = ranking.length ? ranking[0].count : 1;
+  $('rankBody').innerHTML = ranking.length ? ranking.map((o, i) => {
+    const hours = (toSec(o.last) - toSec(o.first)) / 3600;
+    const perHour = hours >= 0.25 ? (o.count / hours).toFixed(1) : '-';
+    return '<tr><td>' + (i + 1) + '</td><td>' + esc(o.name) + '</td><td class="num"><b>' + o.count + '</b></td>' +
+      '<td class="bar-cell"><div class="mini-bar" style="width:' + (o.count / max * 100) + '%"></div></td>' +
+      '<td>' + o.first.slice(0, 5) + '</td><td>' + o.last.slice(0, 5) + '</td><td class="num">' + perHour + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="empty">この日の記録はまだありません</td></tr>';
+
+  // ---- 最新の記録 ----
+  const newCount = lastRowCount >= 0 ? Math.max(0, rows.length - lastRowCount) : 0;
+  lastRowCount = rows.length;
+  const recent = rows.slice(-50).reverse();
+  $('recentBody').innerHTML = recent.length ? recent.map((r, i) =>
+    '<tr' + (i < newCount ? ' class="new"' : '') + '><td>' + r[0] + '</td><td>' + esc(r[1]) +
+    '</td><td>' + esc(r[2]) + '</td><td>端末' + esc(r[3]) + '</td></tr>'
+  ).join('') : '<tr><td colspan="4" class="empty">記録なし</td></tr>';
+
+  // ---- 端末別 ----
+  const devices = [...byDevice.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const dmax = devices.reduce((m, [, v]) => Math.max(m, v.count), 1);
+  $('deviceBody').innerHTML = devices.length ? devices.map(([d, v]) =>
+    '<tr><td>端末' + esc(d) + '</td><td class="num"><b>' + v.count + '</b></td>' +
+    '<td class="bar-cell"><div class="mini-bar" style="width:' + (v.count / dmax * 100) + '%"></div></td>' +
+    '<td>' + v.last.slice(0, 5) + '</td></tr>'
+  ).join('') : '<tr><td colspan="4" class="empty">記録なし</td></tr>';
+}
+
+function baseOptions(indexAxis) {
+  const grid = css('--grid'), text2 = css('--text-2');
+  const valueAxis = {
+    beginAtZero: true,
+    ticks: { color: text2, precision: 0 },
+    grid: { color: grid },
+    border: { display: false }
+  };
+  const catAxis = {
+    ticks: { color: text2, autoSkip: indexAxis !== 'y' },
+    grid: { display: false },
+    border: { color: grid }
+  };
+  return {
+    indexAxis,
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (ctx) => ' ' + ctx.parsed[indexAxis === 'y' ? 'x' : 'y'] + ' ケース' } }
+    },
+    interaction: { mode: 'index', intersect: false },
+    scales: indexAxis === 'y' ? { x: valueAxis, y: catAxis } : { x: catAxis, y: valueAxis }
+  };
+}
+
+function drawWorkerChart(ranking) {
+  const labels = ranking.map((o) => o.name);
+  const values = ranking.map((o) => o.count);
+  // 作業者の人数に合わせてグラフの高さを伸ばす
+  $('workerChart').parentElement.style.height = Math.max(300, labels.length * 32 + 40) + 'px';
+  const ds = {
+    data: values,
+    backgroundColor: css('--series-1'),
+    borderRadius: 4,
+    borderSkipped: 'start',
+    maxBarThickness: 22
+  };
+  if (!workerChart) {
+    workerChart = new Chart($('workerChart'), { type: 'bar', data: { labels, datasets: [ds] }, options: baseOptions('y') });
+  } else {
+    workerChart.data.labels = labels;
+    workerChart.data.datasets[0].data = values;
+    workerChart.data.datasets[0].backgroundColor = css('--series-1');
+    workerChart.update();
+  }
+}
+
+function drawHourChart(byHour) {
+  // 記録がある時間帯の前後だけを表示（なければ 6〜18時）
+  let from = byHour.findIndex((v) => v > 0);
+  let to = 23 - [...byHour].reverse().findIndex((v) => v > 0);
+  if (from < 0) { from = 6; to = 18; }
+  from = Math.min(from, 6); to = Math.max(to, 17);
+  const labels = [], values = [];
+  for (let h = from; h <= to; h++) { labels.push(h + '時'); values.push(byHour[h]); }
+  const ds = {
+    data: values,
+    backgroundColor: css('--series-1'),
+    borderRadius: 4,
+    borderSkipped: 'start',
+    maxBarThickness: 28
+  };
+  if (!hourChart) {
+    hourChart = new Chart($('hourChart'), { type: 'bar', data: { labels, datasets: [ds] }, options: baseOptions('x') });
+  } else {
+    hourChart.data.labels = labels;
+    hourChart.data.datasets[0].data = values;
+    hourChart.data.datasets[0].backgroundColor = css('--series-1');
+    hourChart.update();
+  }
+}
+
+function setAuto() {
+  clearInterval(timer);
+  if ($('auto').checked) timer = setInterval(load, REFRESH_SECONDS * 1000);
+}
+
+// ---- 初期化 ----
+$('date').value = todayStr();
+$('date').addEventListener('change', () => { lastRowCount = -1; load(); });
+$('todayBtn').addEventListener('click', () => { $('date').value = todayStr(); lastRowCount = -1; load(); });
+$('reloadBtn').addEventListener('click', load);
+$('auto').addEventListener('change', setAuto);
+setAuto();
+load();
+</script>
+</body>
+</html>

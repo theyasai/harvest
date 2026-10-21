@@ -1,3 +1,6 @@
+/** @OnlyCurrentDoc */
+// ↑ この行があると、GAS が触れるのは「このスプレッドシートだけ」に限定される（安全のため消さないこと）
+
 /**
  * NFC 収穫管理システム － Google Apps Script（GAS）
  *
@@ -9,6 +12,7 @@
 // ====== 設定 ======================================================
 // スプレッドシートから「拡張機能 → Apps Script」で作った場合は空のままでOK。
 // 別に作ったスクリプトの場合は、スプレッドシートURLの /d/ と /edit の間の文字列を入れる。
+// （その場合は1行目の @OnlyCurrentDoc の行を消す必要がある）
 const SPREADSHEET_ID = '';
 const SHEET_NAME = '記録';
 const TZ = 'Asia/Tokyo';

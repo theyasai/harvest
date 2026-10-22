@@ -154,6 +154,22 @@
     </div>
   </section>
 
+  <section class="panel" style="margin-bottom:16px">
+    <h2>🔍 コンテナ検索（誰が収穫したか）</h2>
+    <form class="controls" id="lookupForm" style="margin-bottom:12px">
+      <input type="text" id="lookupNo" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="コンテナ番号（例：12）"
+        style="font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;width:180px">
+      <button type="submit">検索</button>
+      <span class="state" id="lookupState"></span>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>日付</th><th>時刻</th><th>作業者</th><th>端末</th></tr></thead>
+        <tbody id="lookupBody"><tr><td colspan="4" class="empty">コンテナ番号を入れて「検索」を押してください（新しい順に最大20件）</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel">
     <h2>端末別ケース数</h2>
     <div class="table-wrap">
@@ -399,6 +415,30 @@ $('date').addEventListener('change', () => { lastRowCount = -1; load(); });
 $('todayBtn').addEventListener('click', () => { $('date').value = todayStr(); lastRowCount = -1; load(); });
 $('reloadBtn').addEventListener('click', load);
 $('keyBtn').addEventListener('click', () => { if (askKey()) load(); });
+
+// ---- コンテナ検索 ----
+$('lookupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const n = parseInt($('lookupNo').value, 10);
+  if (!(n >= 1 && n <= 9999)) { $('lookupState').textContent = '番号を入れてください'; return; }
+  const container = String(n).padStart(4, '0');
+  const key = getKey() || askKey();
+  if (!key) return;
+  $('lookupState').className = 'state';
+  $('lookupState').textContent = 'No.' + container + ' を検索中…';
+  try {
+    const res = await jsonp(GAS_URL + '?action=lookup&container=' + container + '&key=' + encodeURIComponent(key) + '&_=' + Date.now());
+    if (res.error === 'key') throw new Error('合言葉が違います');
+    $('lookupState').textContent = 'No.' + container + '：' + res.rows.length + ' 件';
+    $('lookupBody').innerHTML = res.rows.length ? res.rows.map((r) =>
+      '<tr><td>' + esc(r[0].replace(/-/g, '/')) + (r[0] === res.today ? '（今日）' : '') + '</td><td>' + esc(r[1]) +
+      '</td><td><b>' + esc(r[2]) + '</b></td><td>端末' + esc(r[3]) + '</td></tr>'
+    ).join('') : '<tr><td colspan="4" class="empty">このコンテナの記録はありません</td></tr>';
+  } catch (err) {
+    $('lookupState').className = 'state err';
+    $('lookupState').textContent = '検索エラー：' + err.message;
+  }
+});
 $('auto').addEventListener('change', setAuto);
 setAuto();
 load();

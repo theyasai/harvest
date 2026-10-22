@@ -8,6 +8,7 @@
  *   「記録しました」画面を表示します。
  * ・Android の index.html（Web NFC）から送られてきた記録は、結果をデータで返します。
  * ・dashboard.html から呼ばれたときは、その日の記録をデータとして返します。
+ * ・コンテナ番号で検索されたときは、そのコンテナを収穫した人の履歴を返します。
  */
 
 // ====== 設定 ======================================================
@@ -43,6 +44,8 @@ function doGet(e) {
   }
   if (p.action === 'data' && !keyOk) return jsonOut_(p, { error: 'key' });
   if (p.action === 'data') return data_(p);
+  if (p.action === 'lookup' && !keyOk) return jsonOut_(p, { error: 'key' });
+  if (p.action === 'lookup') return lookup_(p);
   return ContentService.createTextOutput('harvest GAS OK');
 }
 
@@ -62,7 +65,22 @@ function getSheet_() {
     sh.getRange('E:E').setNumberFormat('yyyy/mm/dd hh:mm:ss');
     sh.getRange('C:D').setNumberFormat('@'); // 0001 の先頭の0が消えないように文字列扱い
   }
+  // 使わない列（G列以降）を削除して、スプレッドシートの容量（1000万マス）を節約する
+  const maxCols = sh.getMaxColumns();
+  if (maxCols > HEADERS.length) sh.deleteColumns(HEADERS.length + 1, maxCols - HEADERS.length);
   return sh;
+}
+
+// 下（新しい行）から CHUNK 行ずつ読み、行ごとに fn(row) を呼ぶ。fn が false を返したら終了
+const CHUNK = 2000;
+function eachRowFromBottom_(sh, cols, fn) {
+  for (let end = sh.getLastRow(); end >= 2; end -= CHUNK) {
+    const start = Math.max(2, end - CHUNK + 1);
+    const values = sh.getRange(start, 1, end - start + 1, cols).getValues();
+    for (let i = values.length - 1; i >= 0; i--) {
+      if (fn(values[i]) === false) return;
+    }
+  }
 }
 
 // 直近の行を取得
@@ -198,27 +216,59 @@ function resultPage_(r) {
 // ---------------------------------------------------------------
 function data_(p) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date || '') ? p.date : dayStr_(new Date());
+  const startMs = Utilities.parseDate(date + ' 00:00:00', TZ, 'yyyy-MM-dd HH:mm:ss').getTime();
+  const endMs = startMs + 24 * 3600 * 1000;
+  // 電波が悪くて後から届いた記録もあるので、指定日の前日分まで見てから読むのをやめる
+  const stopMs = startMs - 24 * 3600 * 1000;
   const sh = getSheet_();
-  const last = sh.getLastRow();
   const out = [];
-  if (last >= 2) {
-    const values = sh.getRange(2, 1, last - 1, 4).getValues();
-    values.forEach(function (r) {
-      if (!(r[0] instanceof Date) || dayStr_(r[0]) !== date) return;
-      out.push([
-        Utilities.formatDate(r[0], TZ, 'HH:mm:ss'),
-        String(r[1]),
-        pad_(r[2], 4),
-        pad_(r[3], 2)
-      ]);
-    });
-  }
+  eachRowFromBottom_(sh, 4, function (r) {
+    if (!(r[0] instanceof Date)) return;
+    const ms = r[0].getTime();
+    if (ms < stopMs) return false;
+    if (ms < startMs || ms >= endMs) return;
+    out.push([
+      Utilities.formatDate(r[0], TZ, 'HH:mm:ss'),
+      String(r[1]),
+      pad_(r[2], 4),
+      pad_(r[3], 2)
+    ]);
+  });
   out.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
 
   return jsonOut_(p, {
     date: date,
     updated: Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'),
     rows: out // [時刻, 作業者, コンテナID, 端末]
+  });
+}
+
+// ---------------------------------------------------------------
+// コンテナ検索（このコンテナを誰が収穫したか。新しい順に最大 limit 件）
+// ---------------------------------------------------------------
+function lookup_(p) {
+  const c = String(p.container || '').trim();
+  if (!/^\d{1,4}$/.test(c)) return jsonOut_(p, { error: 'container' });
+  const container = pad_(c, 4);
+  const limit = Math.min(Number(p.limit) || 20, 100);
+  const sh = getSheet_();
+  const hits = [];
+  eachRowFromBottom_(sh, 4, function (r) {
+    if (r[0] instanceof Date && pad_(r[2], 4) === container) {
+      hits.push([r[0].getTime(), String(r[1]), pad_(r[3], 2)]);
+      if (hits.length >= limit) return false;
+    }
+  });
+  hits.sort(function (a, b) { return b[0] - a[0]; });
+
+  return jsonOut_(p, {
+    container: container,
+    today: dayStr_(new Date()),
+    // [日付, 時刻, 作業者, 端末]
+    rows: hits.map(function (h) {
+      const d = new Date(h[0]);
+      return [dayStr_(d), Utilities.formatDate(d, TZ, 'HH:mm'), h[1], h[2]];
+    })
   });
 }
 

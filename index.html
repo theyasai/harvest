@@ -394,17 +394,22 @@ let scanning = false;
 let wakeLock = null;
 let lastSerial = '', lastSerialTime = 0;
 
-async function startScan() {
+// resume = true のときは、スリープなどから戻ったときの自動再開
+let scanAbort = null;
+async function startScan(resume) {
   // ボタンを押したこの瞬間に一度しゃべらせておくと、以降も自動で読み上げられる
-  speak('読み取りを開始します');
+  if (!resume) speak('読み取りを開始します');
   try {
+    if (scanAbort) scanAbort.abort();
+    scanAbort = new AbortController();
     const reader = new NDEFReader();
-    await reader.scan();
+    await reader.scan({ signal: scanAbort.signal });
     reader.onreading = onReading;
     reader.onreadingerror = () => {
       show('ng', '❌', '読み取れませんでした', '', 'もう一度ゆっくりかざしてください。', 'もう一度タッチしてください');
     };
     scanning = true;
+    $('scanBtn').textContent = '▶ 読み取り開始';
     $('modeLabel').textContent = '収穫記録（かざすだけで記録）';
     keepScreenOn();
     refreshStatus();
@@ -412,12 +417,20 @@ async function startScan() {
     if (lookupOn()) {
       showHome();
     } else if (w) {
-      show('ok', '🧺', '読み取り中', w, 'コンテナの NFC シールをかざしてください。');
+      show('ok', '🧺', '読み取り中', w, 'コンテナの NFC シールをかざしてください。', resume ? '再開しました' : '');
     } else {
-      show('info', '🪪', '読み取り中', '', '自分の作業者カードをかざしてください。');
+      show('info', '🪪', '読み取り中', '', '自分の作業者カードをかざしてください。', resume ? '再開しました' : '');
     }
   } catch (e) {
-    show('ng', '❌', 'NFC を開始できません', '', 'スマホの設定で NFC がオンになっているか確認してください。（' + e.message + '）', 'NFCを開始できません');
+    scanning = false;
+    refreshStatus();
+    if (resume) {
+      // 自動で再開できなかったときは、ボタンを押してもらう
+      $('scanBtn').textContent = '▶ 読み取り再開';
+      show('warn', '⏸', '読み取りが止まっています', '', '画面が消えたため、読み取りが止まりました。下の「読み取り再開」を押してください。');
+    } else {
+      show('ng', '❌', 'NFC を開始できません', '', 'スマホの設定で NFC がオンになっているか確認してください。（' + e.message + '）', 'NFCを開始できません');
+    }
   }
 }
 
@@ -427,8 +440,16 @@ async function keepScreenOn() {
     if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
   } catch (e) {}
 }
+
+// スリープや別アプリへの切り替えで画面が隠れると NFC の読み取りが止まるので、戻ったら自動で再開する
+let wasScanning = false;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && scanning) keepScreenOn();
+  if (document.visibilityState === 'hidden') {
+    wasScanning = scanning;
+  } else if (wasScanning) {
+    wasScanning = false;
+    startScan(true);
+  }
 });
 
 function onReading(event) {
@@ -637,7 +658,7 @@ $('lookupBtn').onclick = () => {
   showHome();
   speak(lookupOn() ? '検索モードです。記録はされません' : '記録モードに戻しました');
 };
-$('scanBtn').onclick = startScan;
+$('scanBtn').onclick = () => startScan(false);
 
 // ---- ここから実行 ----
 (function main() {

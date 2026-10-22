@@ -4,8 +4,9 @@
 /**
  * NFC 収穫管理システム － Google Apps Script（GAS）
  *
- * ・index.html から location.href で送られてきた記録をスプレッドシートに保存し、
+ * ・iPhone の index.html から location.href で送られてきた記録をスプレッドシートに保存し、
  *   「記録しました」画面を表示します。
+ * ・Android の index.html（Web NFC）から送られてきた記録は、結果をデータで返します。
  * ・dashboard.html から呼ばれたときは、その日の記録をデータとして返します。
  */
 
@@ -16,7 +17,7 @@
 const SPREADSHEET_ID = '';
 const SHEET_NAME = '記録';
 const TZ = 'Asia/Tokyo';
-// 合言葉。iPhone とダッシュボードから送られてくる合言葉がこれと一致しないと、記録も閲覧もできない。
+// 合言葉。スマホとダッシュボードから送られてくる合言葉がこれと一致しないと、記録も閲覧もできない。
 // （GitHub には載せないこと）
 const ACCESS_KEY = 'ここに合言葉';
 // 記録完了画面の「戻る」ボタンの行き先
@@ -33,8 +34,12 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   const keyOk = ACCESS_KEY && ACCESS_KEY !== 'ここに合言葉' && p.key === ACCESS_KEY;
   if (p.action === 'record') {
-    if (!keyOk) return page_('ng', '記録できませんでした', '合言葉が違います。管理者に「設定用リンク」をもらってください', '', '');
-    return record_(p);
+    const result = keyOk
+      ? record_(p)
+      : { status: 'key', title: '記録できませんでした', sub: '合言葉が違います。管理者に「設定用リンク」をもらってください', speech: '合言葉が違います' };
+    // Android（Web NFC）からはデータで返す。iPhone からは結果画面を表示する
+    if (p.format === 'json') return jsonOut_(p, result);
+    return resultPage_(result);
   }
   if (p.action === 'data' && !keyOk) return jsonOut_(p, { error: 'key' });
   if (p.action === 'data') return data_(p);
@@ -78,6 +83,7 @@ function dayStr_(d) {
 
 // ---------------------------------------------------------------
 // 記録（index.html から）
+// 結果は { status: ok/dup/ng, title, sub, big, detail, speech, count } で返す
 // ---------------------------------------------------------------
 function record_(p) {
   const worker = String(p.worker || '').trim().slice(0, 30);
@@ -86,12 +92,12 @@ function record_(p) {
   const rid = String(p.rid || '').trim().slice(0, 40);
 
   if (!worker || !/^\d{1,4}$/.test(containerRaw) || !/^\d{1,2}$/.test(deviceRaw)) {
-    return page_('ng', '記録できませんでした', '送信内容が正しくありません', '', '');
+    return { status: 'ng', title: '記録できませんでした', sub: '送信内容が正しくありません', speech: '記録できませんでした' };
   }
   const container = pad_(containerRaw, 4);
   const device = pad_(deviceRaw, 2);
 
-  // タッチ時刻（iPhone の時計が大きくずれている場合はサーバー時刻を使う）
+  // タッチ時刻（端末の時計が大きくずれている場合はサーバー時刻を使う）
   const now = new Date();
   const t = Number(p.t);
   const touched = (t && Math.abs(now.getTime() - t) < 24 * 3600 * 1000) ? new Date(t) : now;
@@ -101,7 +107,8 @@ function record_(p) {
   try {
     lock.waitLock(20000);
   } catch (err) {
-    return page_('ng', '混み合っています', 'もう一度コンテナをタッチしてください', 'No.' + container, worker);
+    return { status: 'ng', title: '混み合っています', sub: 'もう一度コンテナをタッチしてください',
+      big: 'No.' + container, detail: worker, speech: '混み合っています。もう一度タッチしてください' };
   }
 
   try {
@@ -112,7 +119,7 @@ function record_(p) {
     let status = 'ok';
     for (let i = rows.length - 1; i >= 0; i--) {
       const r = rows[i];
-      // 同じ記録ID（画面の再読み込みなど）
+      // 同じ記録ID（画面の再読み込みや再送信など）
       if (rid && r[5] === rid) { status = 'dup'; break; }
       // 同じコンテナを短時間に再タッチ
       if (r[0] instanceof Date && pad_(r[2], 4) === container &&
@@ -136,18 +143,21 @@ function record_(p) {
 
     const timeStr = Utilities.formatDate(touched, TZ, 'HH:mm:ss');
     if (status === 'dup') {
-      return page_('warn', '記録済みです', '二重タッチのため今回は記録していません', 'No.' + container,
-        worker + ' さん ／ 本日 ' + count + ' ケース');
+      return { status: 'dup', title: '記録済みです', sub: '二重タッチのため今回は記録していません',
+        big: 'No.' + container, detail: worker + ' さん ／ 本日 ' + count + ' ケース',
+        speech: '記録済みです', count: count };
     }
-    return page_('ok', '記録しました', timeStr + ' ／ 端末' + device, 'No.' + container,
-      worker + ' さん ／ 本日 ' + count + ' ケース目');
+    return { status: 'ok', title: '記録しました', sub: timeStr + ' ／ 端末' + device,
+      big: 'No.' + container, detail: worker + ' さん ／ 本日 ' + count + ' ケース目',
+      speech: worker + 'さん、' + count + 'ケース目', count: count };
   } finally {
     lock.releaseLock();
   }
 }
 
-// 記録結果の画面
-function page_(type, title, sub, big, detail) {
+// 記録結果の画面（iPhone 用）。読み上げを試し、鳴らなければ 🔊 ボタンで読み上げる
+function resultPage_(r) {
+  const type = r.status === 'ok' ? 'ok' : r.status === 'dup' ? 'warn' : 'ng';
   const color = { ok: '#1f8a3b', warn: '#c77700', ng: '#c62828' }[type];
   const icon = { ok: '✅', warn: '⚠️', ng: '❌' }[type];
   const t = HtmlService.createTemplate(
@@ -160,19 +170,26 @@ function page_(type, title, sub, big, detail) {
     '.sub{font-size:16px;color:#5b6157;}' +
     '.big{font-size:52px;font-weight:800;margin:16px 0 8px;}' +
     '.detail{font-size:22px;font-weight:700;}' +
-    'a{display:block;max-width:520px;margin:16px auto 0;padding:16px 0;border-radius:12px;background:#fff;border:1px solid #dde2d8;' +
-    'color:#1d1f1b;text-align:center;font-size:18px;font-weight:700;text-decoration:none;}' +
+    'a,button{display:block;width:100%;max-width:520px;margin:16px auto 0;padding:16px 0;border-radius:12px;background:#fff;border:1px solid #dde2d8;' +
+    'color:#1d1f1b;text-align:center;font-size:18px;font-weight:700;text-decoration:none;font-family:inherit;}' +
     '</style></head><body>' +
     '<div class="card"><div class="icon"><?= icon ?></div><h1><?= title ?></h1>' +
     '<div class="sub"><?= sub ?></div><div class="big"><?= big ?></div>' +
     '<div class="detail"><?= detail ?></div></div>' +
+    '<button type="button" id="say" data-text="<?= speech ?>">🔊 読み上げ</button>' +
     '<a href="<?= backUrl ?>" target="_top">ホームに戻る</a>' +
+    '<script>' +
+    'var b=document.getElementById("say");' +
+    'function speak(){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(b.dataset.text);u.lang="ja-JP";speechSynthesis.speak(u);}catch(e){}}' +
+    'b.onclick=speak;' +
+    'if(b.dataset.text&&window.speechSynthesis){speak();}else{b.style.display="none";}' +
+    '</script>' +
     '</body></html>'
   );
-  t.color = color; t.icon = icon; t.title = title; t.sub = sub;
-  t.big = big; t.detail = detail; t.backUrl = BACK_URL;
+  t.color = color; t.icon = icon; t.title = r.title || ''; t.sub = r.sub || '';
+  t.big = r.big || ''; t.detail = r.detail || ''; t.speech = r.speech || ''; t.backUrl = BACK_URL;
   return t.evaluate()
-    .setTitle(title)
+    .setTitle(r.title || '')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

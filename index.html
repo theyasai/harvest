@@ -218,12 +218,26 @@ function speak(text) {
   $('sayBtn').hidden = !lastSpeech || !voiceOn() || !('speechSynthesis' in window);
   if (!lastSpeech || !voiceOn() || !('speechSynthesis' in window)) return;
   try {
-    speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(lastSpeech);
     u.lang = 'ja-JP';
     u.rate = 1.1;
-    speechSynthesis.speak(u);
+    const ja = speechSynthesis.getVoices().find((v) => v.lang && v.lang.replace('_', '-').startsWith('ja'));
+    if (ja) u.voice = ja;
+    currentUtterance = u; // 参照を残しておかないと、Chrome で途中で消えることがある
+    // しゃべっている途中のときだけ止める（何もしていないときに止めると、次の声が出ないことがある）
+    if (speechSynthesis.speaking || speechSynthesis.pending) {
+      speechSynthesis.cancel();
+      setTimeout(() => speechSynthesis.speak(u), 150);
+    } else {
+      speechSynthesis.resume();
+      speechSynthesis.speak(u);
+    }
   } catch (e) {}
+}
+let currentUtterance = null;
+// 音声の一覧は後から読み込まれることがあるので、先に読み込んでおく
+if ('speechSynthesis' in window) {
+  try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {}
 }
 
 // ---- 画面表示 ----

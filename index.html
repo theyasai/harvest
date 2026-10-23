@@ -223,7 +223,7 @@ function getWorker() {
 
 // ---- 音声 ----
 // iPhone は画面をタップしないと音が出ないことがある。その場合は 🔊 ボタンで読み上げる。
-// Android は「読み取り開始」を押したあとは自動で読み上げられる。
+// Android は一度画面に触れたあとは自動で読み上げられる。
 let lastSpeech = '';
 function speak(text) {
   lastSpeech = text || '';

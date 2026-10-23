@@ -1,0 +1,287 @@
+<title>わが家の3Dモデル</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 全画面の3Dキャンバスに、上部の見出しと下部の操作バーを重ねる */
+:root {
+  --bg: #e9ecef;
+  --sky: #dfe6ec;
+  --panel: rgba(255, 255, 255, 0.86);
+  --fg: #1f2a33;
+  --muted: #5d6b76;
+  --line: rgba(31, 42, 51, 0.14);
+  --accent: #2f6f8f;
+  --accent-fg: #ffffff;
+  --font-display: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171b; --sky: #1a2228; --panel: rgba(24, 31, 37, 0.86); --fg: #e6edf2;
+    --muted: #9aa8b2; --line: rgba(230, 237, 242, 0.14); --accent: #6fb3d2; --accent-fg: #0d1418;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171b; --sky: #1a2228; --panel: rgba(24, 31, 37, 0.86); --fg: #e6edf2;
+  --muted: #9aa8b2; --line: rgba(230, 237, 242, 0.14); --accent: #6fb3d2; --accent-fg: #0d1418;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  overflow: hidden; position: relative;
+}
+#view { position: absolute; inset: 0; touch-action: none; }
+#view canvas { display: block; width: 100%; height: 100%; }
+.top, .bar {
+  position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.top { top: 0; padding-block: 14px 0; }
+.bar { bottom: 0; padding-block: 0 max(14px, env(safe-area-inset-bottom, 0px)); display: flex; justify-content: center; }
+.card {
+  pointer-events: auto; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.head { display: inline-flex; flex-direction: column; gap: 2px; padding: 10px 14px; max-width: 100%; }
+.head h1 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: 0.02em; text-wrap: balance; }
+.head p { margin: 0; color: var(--muted); font-size: 12px; }
+.head .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; justify-content: center; max-width: 100%; }
+.seg { display: flex; gap: 2px; background: var(--line); border-radius: 9px; padding: 2px; }
+button {
+  font: inherit; font-size: 14px; color: var(--fg); background: transparent; border: 0;
+  padding: 8px 12px; border-radius: 7px; cursor: pointer; min-height: 36px;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); font-weight: 700; }
+.toggle { border: 1px solid var(--line); }
+.toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { margin-top: 6px; font-size: 11px; color: var(--muted); }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+
+<div id="view" aria-label="家の3Dモデル。ドラッグで回転、ピンチで拡大"></div>
+
+<div class="top">
+  <div class="head card">
+    <h1>わが家の3Dモデル</h1>
+    <p>間取り図から作成 · 外寸 <span class="num" id="dims"></span></p>
+    <p class="hint">ドラッグで回転 · 2本指で移動 · ピンチで拡大。図面に無い窓とドアは推定です。</p>
+  </div>
+</div>
+
+<div class="bar">
+  <div class="controls card">
+    <div class="seg" role="group" aria-label="表示">
+      <button id="v-explode" aria-pressed="true">分解</button>
+      <button id="v-outside" aria-pressed="false">外観</button>
+      <button id="v-1f" aria-pressed="false">1F</button>
+      <button id="v-2f" aria-pressed="false">2F</button>
+    </div>
+    <button id="t-label" class="toggle" aria-pressed="true">部屋名</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const SCENE = /*SCENE_JSON*/null;
+
+const MATS = {
+  wall: [0xf3f1ec, 0.9], frame: [0x3a3f44, 0.6], glass: [0x9fc8dc, 0.2, 0.35],
+  wood: [0xd9b98a, 0.8], tatami: [0xa9c97a, 0.9], aqua: [0xcfe5e6, 0.7], cyan: [0x3fd3e0, 0.5],
+  brown: [0x7a4a12, 0.8], lawn: [0x3f9a4e, 1.0], concrete: [0xc9c6ba, 0.95], tile: [0xd8d5c6, 0.8],
+  darktile: [0x4a4d50, 0.8], gray: [0xc7c9cb, 0.8], charcoal: [0x3d4043, 0.8], beige: [0xd6d1bd, 0.9],
+  roof: [0x5c6670, 0.9], ground: [0x9fae8f, 1.0], stair: [0xf6f4ef, 0.7], stringer: [0xd9d4c7, 0.8],
+  sofa: [0xe7d4cc, 0.95], table: [0xf0b764, 0.6], round: [0xd2995a, 0.6], chair: [0xe8dfc0, 0.9],
+  counter: [0xf4c79a, 0.6], cabinet: [0xf7f7f5, 0.6], appliance: [0xffffff, 0.4], wood2: [0x8a5a2b, 0.8],
+  bike: [0xb8322b, 0.5],
+};
+const mat = {};
+function getMat(key) {
+  if (!mat[key]) {
+    const [c, r, op] = MATS[key] || [0xff00ff, 0.8];
+    mat[key] = new THREE.MeshStandardMaterial({
+      color: c, roughness: r, metalness: 0,
+      transparent: op !== undefined, opacity: op ?? 1, depthWrite: op === undefined,
+    });
+  }
+  return mat[key];
+}
+
+const host = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minDistance = 4;
+controls.maxDistance = 60;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8d8a80, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(-8, 18, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 50 });
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+const groups = {};
+function group(name) {
+  if (!groups[name]) { groups[name] = new THREE.Group(); scene.add(groups[name]); }
+  return groups[name];
+}
+
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+for (const b of SCENE.boxes) {
+  const m = new THREE.Mesh(boxGeo, getMat(b.m === 'wood' && b.n ? 'wood2' : b.m));
+  m.position.set(...b.p);
+  m.scale.set(...b.s);
+  const solid = b.m !== 'glass';
+  m.castShadow = solid && b.g !== 'site';
+  m.receiveShadow = true;
+  group(b.g).add(m);
+}
+
+for (const s of SCENE.slabs) {
+  const shape = new THREE.Shape(s.poly.map(([x, z]) => new THREE.Vector2(x, z)));
+  for (const h of s.holes) shape.holes.push(new THREE.Path(h.map(([x, z]) => new THREE.Vector2(x, z))));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: s.t, bevelEnabled: false });
+  geo.rotateX(Math.PI / 2);
+  const m = new THREE.Mesh(geo, getMat(s.m));
+  m.position.y = s.y;
+  m.receiveShadow = true;
+  m.castShadow = s.g !== '1F';
+  group(s.g).add(m);
+}
+
+const labelSprites = [];
+function makeLabel(text) {
+  const dpr = 2, fs = 30 * dpr, pad = 14 * dpr;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = `700 ${fs}px "Zen Kaku Gothic New", "Hiragino Sans", sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2, h = fs + pad * 1.4;
+  c.width = w; c.height = h;
+  ctx.font = `700 ${fs}px "Zen Kaku Gothic New", "Hiragino Sans", sans-serif`;
+  ctx.fillStyle = 'rgba(31,42,51,0.82)';
+  const r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.arcTo(w, 0, w, h, r); ctx.arcTo(w, h, 0, h, r); ctx.arcTo(0, h, 0, 0, r); ctx.arcTo(0, 0, w, 0, r);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, pad, h / 2 + dpr);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const k = 0.0085;
+  sp.scale.set(w * k / dpr, h * k / dpr, 1);
+  sp.renderOrder = 10;
+  return sp;
+}
+function buildLabels() {
+  for (const sp of labelSprites) sp.parent.remove(sp);
+  labelSprites.length = 0;
+  for (const l of SCENE.labels) {
+    const sp = makeLabel(l.t);
+    sp.position.set(...l.p);
+    group(l.g).add(sp);
+    labelSprites.push(sp);
+  }
+}
+buildLabels();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildLabels);
+
+const [W, D] = SCENE.size;
+document.getElementById('dims').textContent = `${W.toFixed(2)} × ${D.toFixed(2)} m`;
+
+function applyBg() {
+  const sky = getComputedStyle(document.documentElement).getPropertyValue('--sky').trim() || '#dfe6ec';
+  scene.background = new THREE.Color(sky);
+}
+applyBg();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyBg);
+new MutationObserver(applyBg).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// 表示モード
+const LIFT = 4.2;
+const MODES = {
+  explode: { show: ['1F', '2F'], lift: LIFT, cam: [17, 19, 21], target: [0, 2.6, 0] },
+  outside: { show: ['1F', '2F', 'roof'], lift: 0, cam: [15, 10, 18], target: [0, 2.2, 0] },
+  '1f': { show: ['1F'], lift: 0, cam: [9, 15, 14], target: [0, 0.5, 0] },
+  '2f': { show: ['1F', '2F'], lift: 0, cam: [9, 18, 14], target: [0, 3.2, 0] },
+};
+let lift = 0, liftTo = 0, labelsOn = true, mode = 'explode';
+let camTo = null;
+// 縦長の画面では家全体が収まるようにカメラを引く
+function camPos(m) {
+  const t = new THREE.Vector3(...m.target);
+  const aspect = host.clientWidth / Math.max(1, host.clientHeight);
+  const k = aspect < 1 ? Math.min(1.9, 1 / aspect * 0.85) : 1;
+  return new THREE.Vector3(...m.cam).sub(t).multiplyScalar(k).add(t);
+}
+function setMode(name, moveCam = true) {
+  mode = name;
+  const m = MODES[name];
+  for (const [g, obj] of Object.entries(groups)) obj.visible = g === 'site' || m.show.includes(g);
+  liftTo = m.lift;
+  for (const k of Object.keys(MODES)) document.getElementById('v-' + k).setAttribute('aria-pressed', k === name);
+  updateLabels();
+  if (moveCam) camTo = { pos: camPos(m), target: new THREE.Vector3(...m.target), t: 0 };
+}
+function updateLabels() {
+  for (const l of labelSprites) {
+    l.visible = labelsOn && mode !== 'outside' && !(mode === '2f' && l.parent === groups['1F']);
+  }
+}
+for (const k of Object.keys(MODES)) document.getElementById('v-' + k).addEventListener('click', () => setMode(k));
+document.getElementById('t-label').addEventListener('click', (e) => {
+  labelsOn = !labelsOn;
+  e.currentTarget.setAttribute('aria-pressed', labelsOn);
+  updateLabels();
+});
+controls.addEventListener('start', () => { camTo = null; });
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+camera.position.copy(camPos(MODES.explode));
+controls.target.set(...MODES.explode.target);
+setMode('explode', false);
+lift = LIFT;
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function tick() {
+  lift += reduce ? liftTo - lift : (liftTo - lift) * 0.12;
+  if (groups['2F']) groups['2F'].position.y = lift;
+  if (groups.roof) groups.roof.position.y = lift;
+  if (camTo) {
+    camTo.t = reduce ? 1 : Math.min(1, camTo.t + 0.05);
+    camera.position.lerp(camTo.pos, camTo.t);
+    controls.target.lerp(camTo.target, camTo.t);
+    if (camTo.t >= 1) camTo = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+</script>

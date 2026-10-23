@@ -44,7 +44,7 @@
   }
   .badge {
     background: var(--card); border: 1px solid var(--line);
-    border-radius: 999px; padding: 4px 12px; font-weight: 600;
+    border-radius: 999px; padding: 4px 12px; font-weight: 600; white-space: nowrap;
   }
   .badge.scanning { background: var(--ok); border-color: var(--ok); color: #fff; }
   .card {
@@ -81,10 +81,19 @@
     font-family: inherit;
   }
   button.active { background: var(--info); color: #fff; border-color: var(--info); }
-  .scan-btn {
-    margin-top: 16px; padding: 22px 0; font-size: 24px;
-    background: var(--ok); color: #fff; border-color: var(--ok);
+  /* 大きなボタンは「読取」「検索」の2つだけ */
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .mode-btn { padding: 26px 0; font-size: 26px; border-width: 3px; }
+  .mode-btn.sel-record { background: var(--ok); color: #fff; border-color: var(--ok); }
+  .mode-btn.sel-lookup { background: var(--lookup); color: #fff; border-color: var(--lookup); }
+  .hint { margin: 12px 0 0; text-align: center; color: var(--sub); font-size: 15px; }
+  /* 設定は普段は閉じておく */
+  details.settings { margin-top: 24px; }
+  details.settings summary {
+    cursor: pointer; color: var(--sub); font-size: 15px; padding: 8px 0; list-style: none; text-align: center;
   }
+  details.settings summary::-webkit-details-marker { display: none; }
+  details.settings button, details.settings .btn { padding: 10px 0; font-size: 15px; font-weight: 600; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
   .spinner {
     width: 56px; height: 56px; margin: 0 auto 16px;
@@ -97,7 +106,6 @@
     background: var(--lookup); color: #fff; font-weight: 800; font-size: 18px; text-align: center;
   }
   .card.lookup { border-color: var(--lookup); }
-  button.lookup-on { background: var(--lookup); color: #fff; border-color: var(--lookup); }
   .history { margin: 16px 0 0; padding: 0; list-style: none; font-size: 16px; color: var(--sub); line-height: 1.8; }
   [hidden] { display: none !important; }
 </style>
@@ -124,21 +132,26 @@
     <button type="button" class="say" id="sayBtn" hidden>🔊 読み上げ</button>
   </div>
 
-  <!-- Android 用：読み取り開始ボタン -->
-  <button type="button" class="scan-btn" id="scanBtn" hidden>▶ 読み取り開始</button>
+  <!-- 大きなボタン：読取（記録する）／検索（誰が収穫したか調べる） -->
+  <div class="modes">
+    <button type="button" class="mode-btn" id="modeRecord">📥 読取</button>
+    <button type="button" class="mode-btn" id="modeLookup">🔍 検索</button>
+  </div>
+  <p class="hint" id="voiceHint" hidden>🔇 画面のどこかを一度タッチすると、音声が出るようになります</p>
 
   <!-- 電波が悪くて送れなかった記録 -->
   <div class="pending" id="pending" hidden></div>
 
-  <!-- 現在の設定 -->
-  <div class="status" id="status">
-    作業者：<b id="nowWorker">未設定</b><br>
-    端末番号：<b id="nowDevice">未設定</b><br>
-    合言葉：<b id="nowKey">未設定</b>
-  </div>
+  <!-- 設定（普段は閉じておく） -->
+  <details class="settings" id="settings">
+    <summary>⚙ 設定・状態を開く</summary>
 
-  <!-- 設定（ホーム画面のときだけ表示） -->
-  <div id="settings" hidden>
+    <div class="status" id="status">
+      作業者：<b id="nowWorker">未設定</b><br>
+      端末番号：<b id="nowDevice">未設定</b><br>
+      合言葉：<b id="nowKey">未設定</b>
+    </div>
+
     <div class="section-title">この端末の番号（最初に1回だけ設定）</div>
     <div class="devices" id="deviceButtons"></div>
 
@@ -148,10 +161,9 @@
       <button type="button" id="clearWorker">作業者を解除</button>
     </div>
     <div class="row">
-      <button type="button" id="lookupBtn">🔍 検索モード：OFF</button>
       <a class="btn" href="dashboard.html">ダッシュボード</a>
     </div>
-  </div>
+  </details>
 
 </div>
 
@@ -262,13 +274,17 @@ function refreshStatus() {
   $('nowWorker').textContent = w || '未設定';
   $('nowDevice').textContent = d ? '端末' + d : '未設定';
   $('nowKey').textContent = getKey() ? '設定済み' : '未設定';
-  $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? ' 読み取り中' : '');
+  $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? '・読取中' : '');
   $('deviceBadge').className = 'badge' + (scanning ? ' scanning' : '');
   $('voiceBtn').textContent = '音声：' + (voiceOn() ? 'ON' : 'OFF');
-  $('scanBtn').hidden = !HAS_WEB_NFC || scanning;
   $('lookupBanner').hidden = !lookupOn();
-  $('lookupBtn').textContent = '🔍 検索モード：' + (lookupOn() ? 'ON' : 'OFF');
-  $('lookupBtn').className = lookupOn() ? 'lookup-on' : '';
+  // 選んでいるモードのボタンに色を付ける（Android で読み取りが止まっているときはどちらも白）
+  const active = !HAS_WEB_NFC || scanning;
+  $('modeRecord').className = 'mode-btn' + (active && !lookupOn() ? ' sel-record' : '');
+  $('modeLookup').className = 'mode-btn' + (active && lookupOn() ? ' sel-lookup' : '');
+  // Android：まだ画面に一度も触れていないと音声が出ないので、案内を出す
+  $('voiceHint').hidden = !(HAS_WEB_NFC && scanning && voiceOn() &&
+    navigator.userActivation && !navigator.userActivation.hasBeenActive);
   updatePending();
 }
 
@@ -293,17 +309,18 @@ function buildDeviceButtons() {
 }
 
 function showHome() {
-  $('settings').hidden = false;
   buildDeviceButtons();
   const w = getWorker();
+  // 合言葉か端末番号がまだなら、設定を開いておく
+  if (!getKey() || !getDevice()) $('settings').open = true;
   if (!getKey()) {
     show('warn', '🔑', '合言葉が未設定です', '', '管理者から受け取った「設定用リンク」をこの端末で開くか、端末設定カードをタッチしてください。');
   } else if (!getDevice()) {
-    show('warn', '⚙️', '端末番号を設定してください', '', '下のボタンから、この端末の番号を選んでください。');
+    show('warn', '⚙️', '端末番号を設定してください', '', '下の「設定」の中のボタンから、この端末の番号を選んでください。');
   } else if (lookupOn() && (!HAS_WEB_NFC || scanning)) {
     show('lookup', '🔍', '検索モード', '', '調べたいコンテナの NFC シールをタッチすると、誰が収穫したかを表示します。（記録はされません）');
   } else if (HAS_WEB_NFC && !scanning) {
-    show('info', '📶', '「読み取り開始」を押してください', w || '', '押したあとは、カードやシールをかざすだけで記録されます。画面は点けたままにしてください。');
+    show('info', '📶', '「読取」か「検索」を押してください', w || '', '押したあとは、カードやシールをかざすだけです。画面は点けたままにしてください。');
   } else if (!w) {
     show('info', '🪪', '作業者カードをタッチ', '', '自分の NFC カードをかざしてください。');
   } else {
@@ -351,7 +368,7 @@ function prepareRecord(value, time) {
 
   const device = getDevice();
   if (!device) {
-    $('settings').hidden = false;
+    $('settings').open = true;
     buildDeviceButtons();
     show('ng', '⚙️', '端末番号が未設定です', 'No.' + container, '下のボタンで端末番号を選んでから、もう一度コンテナをタッチしてください。（まだ記録されていません）', '端末番号が未設定です');
     return null;
@@ -394,11 +411,10 @@ let scanning = false;
 let wakeLock = null;
 let lastSerial = '', lastSerialTime = 0;
 
-// resume = true のときは、スリープなどから戻ったときの自動再開
+// how = 'button'（ボタンを押した）/ 'auto'（ページを開いたとき）/ 'quiet'（同じだが画面は変えない）
+//       / 'resume'（スリープなどから戻ったとき）
 let scanAbort = null;
-async function startScan(resume) {
-  // ボタンを押したこの瞬間に一度しゃべらせておくと、以降も自動で読み上げられる
-  if (!resume) speak('読み取りを開始します');
+async function startScan(how) {
   try {
     if (scanAbort) scanAbort.abort();
     scanAbort = new AbortController();
@@ -409,30 +425,66 @@ async function startScan(resume) {
       show('ng', '❌', '読み取れませんでした', '', 'もう一度ゆっくりかざしてください。', 'もう一度タッチしてください');
     };
     scanning = true;
-    $('scanBtn').textContent = '▶ 読み取り開始';
-    $('modeLabel').textContent = '収穫記録（かざすだけで記録）';
     keepScreenOn();
     refreshStatus();
-    const w = getWorker();
-    if (lookupOn()) {
-      showHome();
-    } else if (w) {
-      show('ok', '🧺', '読み取り中', w, 'コンテナの NFC シールをかざしてください。', resume ? '再開しました' : '');
-    } else {
-      show('info', '🪪', '読み取り中', '', '自分の作業者カードをかざしてください。', resume ? '再開しました' : '');
-    }
+    // 'quiet'：記録結果などを表示中なので、画面はそのままにする
+    if (how !== 'quiet') showReady(how === 'resume' ? '再開しました' : '');
   } catch (e) {
     scanning = false;
     refreshStatus();
-    if (resume) {
+    if (how === 'resume') {
       // 自動で再開できなかったときは、ボタンを押してもらう
-      $('scanBtn').textContent = '▶ 読み取り再開';
-      show('warn', '⏸', '読み取りが止まっています', '', '画面が消えたため、読み取りが止まりました。下の「読み取り再開」を押してください。');
+      show('warn', '⏸', '読み取りが止まっています', '', '画面が消えたため、読み取りが止まりました。「読取」か「検索」を押してください。');
+    } else if (how === 'auto') {
+      showHome();
+    } else if (how === 'quiet') {
+      // 何もしない
     } else {
       show('ng', '❌', 'NFC を開始できません', '', 'スマホの設定で NFC がオンになっているか確認してください。（' + e.message + '）', 'NFCを開始できません');
     }
   }
 }
+
+// 読み取り中の待ち受け画面
+function showReady(speech) {
+  const w = getWorker();
+  if (lookupOn()) {
+    show('lookup', '🔍', '検索モード', '', '調べたいコンテナの NFC シールをかざすと、誰が収穫したかを表示します。（記録はされません）', speech || '');
+  } else if (w) {
+    show('ok', '🧺', '読み取り中', w, 'コンテナの NFC シールをかざしてください。', speech || '');
+  } else {
+    show('info', '🪪', '読み取り中', '', '自分の作業者カードをかざしてください。', speech || '');
+  }
+}
+
+// 「読取」「検索」ボタン
+async function selectMode(lookup) {
+  save(KEY_LOOKUP, lookup ? 'on' : 'off');
+  // ボタンを押したこの瞬間にしゃべらせておくと、以降も自動で読み上げられる
+  const speech = lookup ? '検索モード。記録はされません' : '読取モード';
+  if (HAS_WEB_NFC && !scanning) {
+    speak(speech);
+    await startScan('button');
+    lastSpeech = speech;
+  } else {
+    refreshStatus();
+    if (HAS_WEB_NFC) showReady(speech);
+    else { showHome(); speak(speech); }
+  }
+  refreshStatus();
+}
+
+// ページを開いたとき、NFC の許可が済んでいればボタンを押さなくても読み取りを始める
+async function autoStart(showingResult) {
+  if (!HAS_WEB_NFC || !navigator.permissions) return;
+  try {
+    const st = await navigator.permissions.query({ name: 'nfc' });
+    if (st.state === 'granted' && getKey() && getDevice()) await startScan(showingResult ? 'quiet' : 'auto');
+  } catch (e) {}
+}
+
+// 一度画面に触れれば音声が出るようになるので、案内を消す
+document.addEventListener('pointerdown', () => setTimeout(refreshStatus, 0), { once: true });
 
 // 画面が勝手に消えないようにする
 async function keepScreenOn() {
@@ -448,7 +500,7 @@ document.addEventListener('visibilitychange', () => {
     wasScanning = scanning;
   } else if (wasScanning) {
     wasScanning = false;
-    startScan(true);
+    startScan('resume');
   }
 });
 
@@ -652,13 +704,8 @@ $('voiceBtn').onclick = () => {
   if (voiceOn()) speak('音声をオンにしました');
 };
 $('sayBtn').onclick = () => speak(lastSpeech);
-$('lookupBtn').onclick = () => {
-  save(KEY_LOOKUP, lookupOn() ? 'off' : 'on');
-  refreshStatus();
-  showHome();
-  speak(lookupOn() ? '検索モードです。記録はされません' : '記録モードに戻しました');
-};
-$('scanBtn').onclick = () => startScan(false);
+$('modeRecord').onclick = () => selectMode(false);
+$('modeLookup').onclick = () => selectMode(true);
 
 // ---- ここから実行 ----
 (function main() {
@@ -670,10 +717,11 @@ $('scanBtn').onclick = () => startScan(false);
     history.replaceState(null, '', location.pathname);
   }
 
-  if (!handleParams(params, 'page', touchTime)) showHome();
+  const handled = handleParams(params, 'page', touchTime);
+  if (!handled) showHome();
   refreshStatus();
-  if (HAS_WEB_NFC) $('settings').hidden = false;
   if (queue.length) flushQueue(null);
+  autoStart(handled);
 })();
 
 // 「戻る」でページがキャッシュから表示された場合はホーム画面に戻す

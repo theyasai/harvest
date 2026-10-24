@@ -81,7 +81,7 @@
     font-family: inherit;
   }
   button.active { background: var(--info); color: #fff; border-color: var(--info); }
-  /* 大きなボタンは「読取」「検索」の2つだけ */
+  /* 大きなボタンは「タッチ」「検索」の2つだけ */
   .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
   .mode-btn { padding: 26px 0; font-size: 26px; border-width: 3px; }
   .mode-btn.sel-record { background: var(--ok); color: #fff; border-color: var(--ok); }
@@ -132,9 +132,9 @@
     <button type="button" class="say" id="sayBtn" hidden>🔊 読み上げ</button>
   </div>
 
-  <!-- 大きなボタン：読取（記録する）／検索（誰が収穫したか調べる） -->
+  <!-- 大きなボタン：タッチ（記録する）／検索（誰が収穫したか調べる） -->
   <div class="modes">
-    <button type="button" class="mode-btn" id="modeRecord">📥 読取</button>
+    <button type="button" class="mode-btn" id="modeRecord">📥 タッチ</button>
     <button type="button" class="mode-btn" id="modeLookup">🔍 検索</button>
   </div>
   <p class="hint" id="voiceHint" hidden>🔇 画面のどこかを一度タッチすると、音声が出るようになります</p>
@@ -274,7 +274,7 @@ function refreshStatus() {
   $('nowWorker').textContent = w || '未設定';
   $('nowDevice').textContent = d ? '端末' + d : '未設定';
   $('nowKey').textContent = getKey() ? '設定済み' : '未設定';
-  $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? '・読取中' : '');
+  $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? '・受付中' : '');
   $('deviceBadge').className = 'badge' + (scanning ? ' scanning' : '');
   $('voiceBtn').textContent = '音声：' + (voiceOn() ? 'ON' : 'OFF');
   $('lookupBanner').hidden = !lookupOn();
@@ -320,7 +320,7 @@ function showHome() {
   } else if (lookupOn() && (!HAS_WEB_NFC || scanning)) {
     show('lookup', '🔍', '検索モード', '', '調べたいコンテナの NFC シールをタッチすると、誰が収穫したかを表示します。（記録はされません）');
   } else if (HAS_WEB_NFC && !scanning) {
-    show('info', '📶', '「読取」か「検索」を押してください', w || '', '押したあとは、カードやシールをかざすだけです。画面は点けたままにしてください。');
+    show('info', '📶', '「タッチ」か「検索」を押してください', w || '', '押したあとは、カードやシールをかざすだけです。画面は点けたままにしてください。');
   } else if (!w) {
     show('info', '🪪', '作業者カードをタッチ', '', '自分の NFC カードをかざしてください。');
   } else {
@@ -434,7 +434,7 @@ async function startScan(how) {
     refreshStatus();
     if (how === 'resume') {
       // 自動で再開できなかったときは、ボタンを押してもらう
-      show('warn', '⏸', '読み取りが止まっています', '', '画面が消えたため、読み取りが止まりました。「読取」か「検索」を押してください。');
+      show('warn', '⏸', '読み取りが止まっています', '', '画面が消えたため、読み取りが止まりました。「タッチ」か「検索」を押してください。');
     } else if (how === 'auto') {
       showHome();
     } else if (how === 'quiet') {
@@ -457,11 +457,11 @@ function showReady(speech) {
   }
 }
 
-// 「読取」「検索」ボタン
+// 「タッチ」「検索」ボタン
 async function selectMode(lookup) {
   save(KEY_LOOKUP, lookup ? 'on' : 'off');
   // ボタンを押したこの瞬間にしゃべらせておくと、以降も自動で読み上げられる
-  const speech = lookup ? '検索モード。記録はされません' : '読取モード';
+  const speech = lookup ? '検索モード。記録はされません' : 'タッチモード';
   if (HAS_WEB_NFC && !scanning) {
     speak(speech);
     await startScan('button');

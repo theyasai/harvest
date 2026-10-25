@@ -115,6 +115,7 @@
 
   <div class="topbar">
     <span id="modeLabel">収穫記録</span>
+    <span class="badge" id="cropBadge" style="margin-right:4px">品目 --</span>
     <span class="badge" id="deviceBadge">端末 --</span>
   </div>
 
@@ -149,11 +150,15 @@
     <div class="status" id="status">
       作業者：<b id="nowWorker">未設定</b><br>
       端末番号：<b id="nowDevice">未設定</b><br>
+      品目：<b id="nowCrop">未設定</b><br>
       合言葉：<b id="nowKey">未設定</b>
     </div>
 
     <div class="section-title">この端末の番号（最初に1回だけ設定）</div>
     <div class="devices" id="deviceButtons"></div>
+
+    <div class="section-title">品目（収穫する野菜を選ぶ）</div>
+    <div class="devices" id="cropButtons" style="grid-template-columns: repeat(3, 1fr);"></div>
 
     <div class="section-title">その他</div>
     <div class="row">
@@ -195,6 +200,10 @@ const KEY_ACCESS = 'harvest_key';
 const KEY_VOICE = 'harvest_voice';
 const KEY_QUEUE = 'harvest_queue';
 const KEY_LOOKUP = 'harvest_lookup';
+const KEY_CROP = 'harvest_crop';
+
+// 品目リスト
+const CROPS = ['ちんげん菜', 'ほうれん草', '長ネギ'];
 
 // localStorage（スマホの中にデータを保存する仕組み）を安全に使うための関数
 function load(key) {
@@ -209,6 +218,7 @@ function remove(key) {
 
 function getDevice() { return load(KEY_DEVICE); }
 function getKey() { return load(KEY_ACCESS); }
+function getCrop() { return load(KEY_CROP); }
 function voiceOn() { return load(KEY_VOICE) !== 'off'; }
 function lookupOn() { return load(KEY_LOOKUP) === 'on'; }
 
@@ -273,6 +283,7 @@ function refreshStatus() {
   const d = getDevice();
   $('nowWorker').textContent = w || '未設定';
   $('nowDevice').textContent = d ? '端末' + d : '未設定';
+  $('nowCrop').textContent = getCrop() || '未設定';
   $('nowKey').textContent = getKey() ? '設定済み' : '未設定';
   $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? '・受付中' : '');
   $('deviceBadge').className = 'badge' + (scanning ? ' scanning' : '');
@@ -308,15 +319,38 @@ function buildDeviceButtons() {
   }
 }
 
+function buildCropButtons() {
+  const box = $('cropButtons');
+  box.innerHTML = '';
+  const current = getCrop();
+  CROPS.forEach((crop) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = crop;
+    if (crop === current) b.className = 'active';
+    b.style.fontSize = '14px';
+    b.onclick = () => {
+      save(KEY_CROP, crop);
+      buildCropButtons();
+      refreshStatus();
+      showHome();
+    };
+    box.appendChild(b);
+  });
+}
+
 function showHome() {
   buildDeviceButtons();
+  buildCropButtons();
   const w = getWorker();
-  // 合言葉か端末番号がまだなら、設定を開いておく
-  if (!getKey() || !getDevice()) $('settings').open = true;
+  // 合言葉か端末番号か品目がまだなら、設定を開いておく
+  if (!getKey() || !getDevice() || !getCrop()) $('settings').open = true;
   if (!getKey()) {
     show('warn', '🔑', '合言葉が未設定です', '', '管理者から受け取った「設定用リンク」をこの端末で開くか、端末設定カードをタッチしてください。');
   } else if (!getDevice()) {
     show('warn', '⚙️', '端末番号を設定してください', '', '下の「設定」の中のボタンから、この端末の番号を選んでください。');
+  } else if (!getCrop()) {
+    show('warn', '🥬', '品目を設定してください', '', '下の「設定」の中から収穫する野菜を選んでください。');
   } else if (lookupOn() && (!HAS_WEB_NFC || scanning)) {
     show('lookup', '🔍', '検索モード', '', '調べたいコンテナの NFC シールをタッチすると、誰が収穫したかを表示します。（記録はされません）');
   } else if (HAS_WEB_NFC && !scanning) {
@@ -380,6 +414,14 @@ function prepareRecord(value, time) {
     return null;
   }
 
+  const crop = getCrop();
+  if (!crop) {
+    $('settings').open = true;
+    buildCropButtons();
+    show('ng', '🥬', '品目が未設定です', 'No.' + container, '下の「設定」の中から収穫する野菜を選んでから、もう一度コンテナをタッチしてください。（まだ記録されていません）', '品目が未設定です');
+    return null;
+  }
+
   const worker = getWorker();
   if (!worker) {
     show('ng', '🪪', '作業者が未設定です', 'No.' + container, '先に自分のタグをタッチしてから、もう一度コンテナをタッチしてください。（まだ記録されていません）', '自分のタグをタッチしてください');
@@ -392,6 +434,7 @@ function prepareRecord(value, time) {
     worker: worker,
     container: container,
     device: device,
+    crop: crop,
     // 記録ID：同じ記録が二重に登録されるのを防ぐための目印
     rid: time.getTime().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
     key: key

@@ -346,7 +346,7 @@ function handleDevice(value) {
 function handleWorker(name) {
   name = name.trim().slice(0, 30);
   if (!name) {
-    show('ng', '❌', '作業者カードが読めません', '', 'カードの書き込み内容を確認してください。', 'カードが読めません');
+    show('ng', '❌', '自分のタグが読めません', '', 'タグの書き込み内容を確認してください。', 'タグが読めません');
     return;
   }
   const ok = save(KEY_WORKER, name) && save(KEY_WORKER_TIME, String(Date.now()));
@@ -382,7 +382,7 @@ function prepareRecord(value, time) {
 
   const worker = getWorker();
   if (!worker) {
-    show('ng', '🪪', '作業者が未設定です', 'No.' + container, '先に自分の作業者カードをタッチしてから、もう一度コンテナをタッチしてください。（まだ記録されていません）', '作業者カードをタッチしてください');
+    show('ng', '🪪', '作業者が未設定です', 'No.' + container, '先に自分のタグをタッチしてから、もう一度コンテナをタッチしてください。（まだ記録されていません）', '自分のタグをタッチしてください');
     return null;
   }
 
@@ -453,7 +453,7 @@ function showReady(speech) {
   } else if (w) {
     show('ok', '🧺', '読み取り中', w, 'コンテナの NFC シールをかざしてください。', speech || '');
   } else {
-    show('info', '🪪', '読み取り中', '', '自分の作業者カードをかざしてください。', speech || '');
+    show('info', '🪪', '読み取り中', '', '自分のタグをかざしてください。', speech || '');
   }
 }
 

@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+write_log.csv
+progress.txt

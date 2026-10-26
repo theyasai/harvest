@@ -73,19 +73,44 @@ def transmit(conn, apdu):
     return data
 
 
-def wait_card(reader):
-    """カードが置かれるまで待って、接続を返す"""
+def wait_card(reader, last_uid=None):
+    """新しいカード（シール）が置かれるまで待って (接続, UID) を返す。
+
+    last_uid と同じシールがまだ置かれたままなら無視して待つ。
+    一度リーダーが空になったのを確認できた場合は、同じシールでも受け付ける（置き直し）。
+    「外した」の検知が遅れても、別のシールを置けばすぐ反応する。
+    """
+    seen_empty = last_uid is None
     while True:
         conn = reader.createConnection()
         try:
             conn.connect()
-            return conn
         except (NoCardException, CardConnectionException):
-            time.sleep(0.2)
+            seen_empty = True
+            time.sleep(0.1)
+            continue
+        uid = None
+        # 置いた直後は読み取りが安定しないことがあるので、数回読み直す
+        for _ in range(5):
+            try:
+                uid = get_uid(conn)
+                break
+            except (NfcError, CardConnectionException):
+                time.sleep(0.1)
+        if uid is None or (uid == last_uid and not seen_empty):
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
+            if uid is None:
+                seen_empty = True
+            time.sleep(0.1)
+            continue
+        return conn, uid
 
 
 def wait_remove(reader):
-    """カードが取り除かれるまで待つ"""
+    """カードが取り除かれるまで待つ（今は使っていない。互換のため残す）"""
     while True:
         conn = reader.createConnection()
         try:
@@ -253,13 +278,14 @@ def mode_containers(reader):
 
     n = start
     used_uids = set()   # 同じ番号で書いたシールの UID（同じシールを2回置いたときの見分け用）
+    last_uid = None     # 直前に処理したシール（置いたままのときに何度も反応しないように）
     while n <= end:
         url = container_url(n)
         label = "%04d の %d/%d 枚目" % (n, side, per)
         print("▶ コンテナ %s のシールを置いてください…" % label, end="", flush=True)
-        conn = wait_card(reader)
+        conn, uid = wait_card(reader, last_uid)
+        last_uid = uid
         try:
-            uid = get_uid(conn)
             if uid in used_uids:
                 print()
                 print("  ✖ このシールは今 %04d を書いたばかりのシールです。新しいシールを置いてください。" % n)
@@ -303,7 +329,6 @@ def mode_containers(reader):
                 conn.disconnect()
             except Exception:
                 pass
-            wait_remove(reader)
 
     print()
     print("完了しました！ %04d 〜 %04d（各 %d 枚）" % (start, end, per))
@@ -336,10 +361,14 @@ def mode_device(reader):
     write_one(reader, "端末設定", "%02d" % n, url)
 
 
+_last_one_uid = None
+
+
 def write_one(reader, kind, value, url):
-    conn = wait_card(reader)
+    global _last_one_uid
+    conn, uid = wait_card(reader, _last_one_uid)
+    _last_one_uid = uid
     try:
-        uid = get_uid(conn)
         write_url(conn, url)
         log(kind, value, uid, url)
         print(" OK  (UID %s)" % uid)
@@ -355,8 +384,7 @@ def write_one(reader, kind, value, url):
             conn.disconnect()
         except Exception:
             pass
-    print("   カードを外してください。")
-    wait_remove(reader)
+    print("   カードを外して、次のカードを置いてください。")
 
 
 # ------------------------------------------------------------------
@@ -365,10 +393,11 @@ def write_one(reader, kind, value, url):
 def mode_check(reader):
     print("確認したいシール/カードを置いてください。（Ctrl + C でメニューに戻る）")
     try:
+        last_uid = None
         while True:
-            conn = wait_card(reader)
+            conn, uid = wait_card(reader, last_uid)
+            last_uid = uid
             try:
-                uid = get_uid(conn)
                 url = read_url(conn)
                 print("UID %s : %s" % (uid, urllib.parse.unquote(url) if url else "（何も書かれていません）"))
             except (NfcError, CardConnectionException) as e:
@@ -378,7 +407,6 @@ def mode_check(reader):
                     conn.disconnect()
                 except Exception:
                     pass
-            wait_remove(reader)
     except KeyboardInterrupt:
         print()
 

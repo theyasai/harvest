@@ -56,6 +56,7 @@
   .card.ng   { border-color: var(--ng); }
   .card.info { border-color: var(--info); }
   .icon { font-size: 64px; line-height: 1; margin-bottom: 12px; }
+  .icon-img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto 12px; border-radius: 12px; background: #fff; }
   h1 { font-size: 26px; margin: 0 0 12px; }
   .big { font-size: 40px; font-weight: 800; margin: 8px 0; word-break: break-all; }
   .msg { font-size: 18px; color: var(--sub); line-height: 1.6; margin: 0; white-space: pre-line; }
@@ -126,6 +127,7 @@
   <div class="card" id="card">
     <div id="spinner" class="spinner" hidden></div>
     <div class="icon" id="icon"></div>
+    <img id="iconImg" class="icon-img" src="container.jpg" alt="コンテナの印の場所をスマホでタッチ" hidden>
     <h1 id="title"></h1>
     <div class="big" id="big"></div>
     <p class="msg" id="msg"></p>
@@ -268,8 +270,11 @@ const $ = (id) => document.getElementById(id);
 function show(type, icon, title, big, msg, speech) {
   $('card').className = 'card ' + (type || '');
   $('spinner').hidden = type !== 'sending';
-  $('icon').hidden = type === 'sending';
-  $('icon').textContent = icon || '';
+  // icon が 'CONTAINER' のときは絵文字ではなくコンテナの画像を出す
+  const useImg = icon === 'CONTAINER';
+  $('iconImg').hidden = !useImg || type === 'sending';
+  $('icon').hidden = useImg || type === 'sending';
+  $('icon').textContent = useImg ? '' : (icon || '');
   $('title').textContent = title || '';
   $('big').textContent = big || '';
   $('big').hidden = !big;
@@ -284,6 +289,7 @@ function refreshStatus() {
   $('nowWorker').textContent = w || '未設定';
   $('nowDevice').textContent = d ? '端末' + d : '未設定';
   $('nowCrop').textContent = getCrop() || '未設定';
+  $('cropBadge').textContent = getCrop() || '品目 --';
   $('nowKey').textContent = getKey() ? '設定済み' : '未設定';
   $('deviceBadge').textContent = (d ? '端末' + d : '端末 --') + (scanning ? '・受付中' : '');
   $('deviceBadge').className = 'badge' + (scanning ? ' scanning' : '');
@@ -358,7 +364,7 @@ function showHome() {
   } else if (!w) {
     show('info', '🪪', '①自分のタグにタッチ', '', '自分の NFC タグをスキャンしてください。');
   } else {
-    show('ok', '🧺', '②コンテナのタグにタッチ', w, 'コンテナの NFC タグをスキャンすると記録されます。');
+    show('ok', 'CONTAINER', '②コンテナのタグにタッチ', w, 'コンテナの NFC タグをスキャンすると記録されます。');
   }
 }
 
@@ -494,7 +500,7 @@ function showReady(speech) {
   if (lookupOn()) {
     show('lookup', '🔍', '検索モード', '', '調べたいコンテナの NFC シールをかざすと、誰が収穫したかを表示します。（記録はされません）', speech || '');
   } else if (w) {
-    show('ok', '🧺', '②コンテナのタグにタッチ', w, 'コンテナの NFC タグをスキャンしてください。', speech || '');
+    show('ok', 'CONTAINER', '②コンテナのタグにタッチ', w, 'コンテナの NFC タグをスキャンしてください。', speech || '');
   } else {
     show('info', '🪪', '①自分のタグにタッチ', '', '自分の NFC タグをスキャンしてください。', speech || '');
   }

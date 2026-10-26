@@ -48,15 +48,23 @@ def flags(state):
     return ",".join(names) or "-"
 
 
+def pick_reader(rs):
+    """シールをかざす側（PICC / 非接触）のリーダーを選ぶ。SAM（ICチップ差し込み口）は使わない"""
+    for r in rs:
+        if "PICC" in str(r).upper():
+            return r
+    for r in rs:
+        if "SAM" not in str(r).upper() and ("ACR" in str(r) or "ACS" in str(r)):
+            return r
+    return rs[0]
+
+
 def main():
     rs = readers()
     print("見つかったリーダー:", [str(r) for r in rs])
     if not rs:
         return
-    reader = rs[0]
-    for r in rs:
-        if "ACR122" in str(r) or "ACS" in str(r):
-            reader = r
+    reader = pick_reader(rs)
     name = str(reader)
     print("使うリーダー:", name)
     print("Python:", sys.version.split()[0], " OS:", sys.platform)

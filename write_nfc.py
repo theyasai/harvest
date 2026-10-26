@@ -58,10 +58,15 @@ class NfcError(Exception):
 def get_reader():
     rs = readers()
     if not rs:
-        print("カードリーダーが見つかりません。ACR122U を USB に挿してください。")
+        print("カードリーダーが見つかりません。カードリーダー（ACR122U / ACR1552 など）を USB に挿してください。")
         sys.exit(1)
+    # シールをかざす側（PICC / 非接触）を選ぶ。ACR1552 などは SAM（ICチップ差し込み口）も
+    # 別のリーダーとして見えるので、そちらは使わない
     for r in rs:
-        if "ACR122" in str(r) or "ACS" in str(r):
+        if "PICC" in str(r).upper():
+            return r
+    for r in rs:
+        if "SAM" not in str(r).upper() and ("ACR" in str(r) or "ACS" in str(r)):
             return r
     return rs[0]
 

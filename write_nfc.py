@@ -25,6 +25,10 @@ from datetime import datetime
 try:
     from smartcard.System import readers
     from smartcard.Exceptions import NoCardException, CardConnectionException
+    try:
+        from smartcard.scard import SCARD_LEAVE_CARD
+    except ImportError:
+        SCARD_LEAVE_CARD = 0  # PC/SC の決まった値（シールの電源を切らずに切断する）
 except ImportError:
     print("pyscard が入っていません。次のコマンドを実行してください:")
     print("    pip install pyscard")
@@ -55,6 +59,23 @@ class NfcError(Exception):
 # ------------------------------------------------------------------
 # カードリーダー操作
 # ------------------------------------------------------------------
+def connect_card(conn):
+    """シールにつなぐ。切断するときにシールの電源を切らない設定にする。
+
+    電源を切って切断すると、ACR1552 はシールを外してもしばらく（6〜10秒）
+    「まだ載っている」と判断したままになり、次のシールにすぐ反応しない。
+    電源を切らずに切断すれば、外した瞬間に気づいて次のシールにすぐ反応する。
+    """
+    try:
+        conn.connect(disposition=SCARD_LEAVE_CARD)
+    except TypeError:
+        # 古い pyscard は disposition を受け付けないので、普通につないでから設定する
+        conn.connect()
+        for target in (conn, getattr(conn, "component", None)):
+            if target is not None and hasattr(target, "disposition"):
+                target.disposition = SCARD_LEAVE_CARD
+
+
 def get_reader():
     rs = readers()
     if not rs:
@@ -89,7 +110,7 @@ def wait_card(reader, last_uid=None):
     while True:
         conn = reader.createConnection()
         try:
-            conn.connect()
+            connect_card(conn)
         except (NoCardException, CardConnectionException):
             seen_empty = True
             time.sleep(0.1)
@@ -119,7 +140,7 @@ def wait_remove(reader):
     while True:
         conn = reader.createConnection()
         try:
-            conn.connect()
+            connect_card(conn)
             conn.disconnect()
             time.sleep(0.2)
         except (NoCardException, CardConnectionException):

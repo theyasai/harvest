@@ -6,7 +6,7 @@ NFC シール / カード 書き込みツール（ACR122U + NTAG213/215/216 用�
     python write_nfc.py
 
 メニューから選びます:
-    1. コンテナシールを連続で書き込む（0001〜1000）
+    1. コンテナシールを連続で書き込む（0001〜1000。1コンテナ2枚セット）
     2. 作業者カードを書き込む
     3. 端末番号設定カードを書き込む
     4. 書き込み内容を確認する（読み取りのみ）
@@ -35,10 +35,12 @@ BASE_URL = "https://theyasai.github.io/harvest/"
 CONTAINER_MIN = 1
 CONTAINER_MAX = 1000
 DEVICE_COUNT = 5
+# 1コンテナに貼るシールの枚数（両サイドに1枚ずつ = 2）
+TAGS_PER_CONTAINER = 2
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(HERE, "write_log.csv")        # 書き込み記録
-PROGRESS_FILE = os.path.join(HERE, "progress.txt")    # 次に書く番号（中断しても続きから）
+PROGRESS_FILE = os.path.join(HERE, "progress.txt")    # 次に書く番号と枚目（中断しても続きから）
 # ================================================================
 
 # NDEF の URI 省略コード: 0x04 = "https://"
@@ -194,16 +196,22 @@ def log(kind, value, uid, url):
 
 
 def load_progress():
+    """(次の番号, 何枚目) を返す。古い形式（番号だけ）にも対応"""
     try:
         with open(PROGRESS_FILE, encoding="utf-8") as f:
-            return int(f.read().strip())
-    except (OSError, ValueError):
-        return CONTAINER_MIN
+            parts = f.read().strip().split(",")
+        n = int(parts[0])
+        side = int(parts[1]) if len(parts) > 1 else 1
+        if not (1 <= side <= TAGS_PER_CONTAINER):
+            side = 1
+        return n, side
+    except (OSError, ValueError, IndexError):
+        return CONTAINER_MIN, 1
 
 
-def save_progress(n):
+def save_progress(n, side=1):
     with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
-        f.write(str(n))
+        f.write("%d,%d" % (n, side))
 
 
 def ask_int(prompt, default, lo, hi):
@@ -230,42 +238,63 @@ def container_from_url(url):
 # 1. コンテナシール連続書き込み
 # ------------------------------------------------------------------
 def mode_containers(reader):
-    start = ask_int("開始番号", load_progress(), CONTAINER_MIN, CONTAINER_MAX)
+    saved_n, saved_side = load_progress()
+    start = ask_int("開始番号", saved_n, CONTAINER_MIN, CONTAINER_MAX)
     end = ask_int("終了番号", CONTAINER_MAX, start, CONTAINER_MAX)
+    per = ask_int("1コンテナあたりの枚数", TAGS_PER_CONTAINER, 1, 4)
+    # 前回が途中（2枚目の前）で止まっていたら、その続きから
+    side = saved_side if (start == saved_n and saved_side <= per) else 1
     print()
+    print("同じ番号のシールを %d 枚ずつ書き込みます（コンテナの両サイド用）。" % per)
     print("シールを1枚ずつリーダーに置いてください。")
     print("「OK」が出たらシールを外し、次のシールを置きます。中断は Ctrl + C です。")
+    print("書き終わったシールは、番号ごとに %d 枚まとめて置いておくと貼るときに迷いません。" % per)
     print()
 
     n = start
+    used_uids = set()   # 同じ番号で書いたシールの UID（同じシールを2回置いたときの見分け用）
     while n <= end:
         url = container_url(n)
-        print("▶ コンテナ %04d のシールを置いてください…" % n, end="", flush=True)
+        label = "%04d の %d/%d 枚目" % (n, side, per)
+        print("▶ コンテナ %s のシールを置いてください…" % label, end="", flush=True)
         conn = wait_card(reader)
         try:
             uid = get_uid(conn)
+            if uid in used_uids:
+                print()
+                print("  ✖ このシールは今 %04d を書いたばかりのシールです。新しいシールを置いてください。" % n)
+                continue
             existing = read_url(conn)
             old = container_from_url(existing)
             if old == "%04d" % n:
-                print(" すでに %04d が書き込まれています（スキップ）" % n)
+                print(" すでに %04d が書き込まれています（この1枚として数えます）" % n)
             else:
                 if old is not None:
                     print()
                     ans = input("  このシールには %s が書かれています。%04d で上書きしますか？ (y/n): " % (old, n))
                     if ans.strip().lower() != "y":
                         print("  上書きしませんでした。別のシールを置いてください。")
-                        conn.disconnect()
-                        wait_remove(reader)
                         continue
                 write_url(conn, url)
-                log("コンテナ", "%04d" % n, uid, url)
+                log("コンテナ", "%04d（%d/%d枚目）" % (n, side, per), uid, url)
                 print(" OK  (UID %s)" % uid)
-            n += 1
-            save_progress(n if n <= CONTAINER_MAX else CONTAINER_MIN)
+            used_uids.add(uid)
+            # 次のシールへ
+            if side < per:
+                side += 1
+            else:
+                print("  ── コンテナ %04d の %d 枚セット完了 ──" % (n, per))
+                side = 1
+                n += 1
+                used_uids = set()
+            if n <= CONTAINER_MAX:
+                save_progress(n, side)
+            else:
+                save_progress(CONTAINER_MIN, 1)
         except NfcError as e:
             print()
             print("  ✖ エラー: %s" % e)
-            print("  シールを置き直してください。（同じ番号でやり直します）")
+            print("  シールを置き直してください。（同じ番号・同じ枚目でやり直します）")
         except CardConnectionException:
             print()
             print("  ✖ 途中でシールが離れました。置き直してください。")
@@ -274,10 +303,10 @@ def mode_containers(reader):
                 conn.disconnect()
             except Exception:
                 pass
-        wait_remove(reader)
+            wait_remove(reader)
 
     print()
-    print("完了しました！ %04d 〜 %04d" % (start, end))
+    print("完了しました！ %04d 〜 %04d（各 %d 枚）" % (start, end, per))
 
 
 # ------------------------------------------------------------------
@@ -361,7 +390,7 @@ def main():
     while True:
         print()
         print("==== NFC 書き込みツール ====")
-        print(" 1. コンテナシールを連続で書き込む")
+        print(" 1. コンテナシールを連続で書き込む（2枚1セット）")
         print(" 2. 作業者カードを書き込む")
         print(" 3. 端末番号設定カードを書き込む")
         print(" 4. 書き込み内容を確認する")

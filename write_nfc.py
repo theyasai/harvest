@@ -38,7 +38,7 @@ except ImportError:
 BASE_URL = "https://theyasai.github.io/harvest/"
 CONTAINER_MIN = 1
 CONTAINER_MAX = 1000
-DEVICE_COUNT = 5
+DEVICE_COUNT = 10
 # 1コンテナに貼るシールの枚数（両サイドに1枚ずつ = 2）
 TAGS_PER_CONTAINER = 2
 

@@ -181,7 +181,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbx3n7p5f1efbJdAP9n-h1xk
 // 作業者カードをタッチしてから何時間で作業者設定を無効にするか（翌日の付け忘れ防止）
 const WORKER_EXPIRE_HOURS = 12;
 // 端末の台数
-const DEVICE_COUNT = 5;
+const DEVICE_COUNT = 10;
 // コンテナ番号の範囲
 const CONTAINER_MIN = 1;
 const CONTAINER_MAX = 1000;
@@ -768,6 +768,10 @@ $('modeLookup').onclick = () => selectMode(true);
 
   const handled = handleParams(params, 'page', touchTime);
   if (!handled) showHome();
+  // 設定用リンクを開いたときなども、端末番号・品目のボタンを表示しておく
+  buildDeviceButtons();
+  buildCropButtons();
+  if (!getKey() || !getDevice() || !getCrop()) $('settings').open = true;
   refreshStatus();
   if (queue.length) flushQueue(null);
   autoStart(handled);

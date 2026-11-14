@@ -11,6 +11,9 @@
   --line: rgba(31, 42, 51, 0.14);
   --accent: #2f6f8f;
   --accent-fg: #ffffff;
+  --pin: #d2552d;
+  --warn: #b5442a;
+  --good: #2e7d4f;
   --font-display: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, monospace;
@@ -19,12 +22,14 @@
   :root:not([data-theme="light"]) {
     --bg: #12171b; --sky: #1a2228; --panel: rgba(24, 31, 37, 0.86); --fg: #e6edf2;
     --muted: #9aa8b2; --line: rgba(230, 237, 242, 0.14); --accent: #6fb3d2; --accent-fg: #0d1418;
+    --pin: #e0643a; --warn: #f08a6c; --good: #6cc792;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12171b; --sky: #1a2228; --panel: rgba(24, 31, 37, 0.86); --fg: #e6edf2;
   --muted: #9aa8b2; --line: rgba(230, 237, 242, 0.14); --accent: #6fb3d2; --accent-fg: #0d1418;
+  --pin: #e0643a; --warn: #f08a6c; --good: #6cc792;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -60,6 +65,35 @@ button {
 .toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hint { margin-top: 6px; font-size: 11px; color: var(--muted); }
+.fixes {
+  position: absolute; z-index: 3; right: max(16px, env(safe-area-inset-right, 0px)); top: 14px;
+  width: min(360px, calc(100% - 32px)); max-height: calc(100% - 110px - env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.fixes[hidden] { display: none; }
+.fixes header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 8px 6px 14px; }
+.fixes h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.fixes .scroll { overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.fix { display: grid; grid-template-columns: 26px 1fr; gap: 10px; text-align: left; padding: 10px 8px; border-radius: 9px; min-width: 0; }
+.fix:hover, .fix.active { background: var(--line); }
+.fix .no {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--pin); color: #fff;
+  font: 700 13px/24px var(--font-num); text-align: center;
+}
+.fix b { display: block; font-size: 14px; margin-bottom: 4px; }
+.fix .fl { font: 500 11px var(--font-num); color: var(--muted); margin-left: 6px; }
+.fix p { margin: 0 0 3px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.fix p span { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 5px; margin-right: 5px; border-radius: 4px; }
+.fix p .b { color: var(--warn); border: 1px solid var(--warn); }
+.fix p .a { color: var(--good); border: 1px solid var(--good); }
+.notes { margin: 6px 8px 0; padding: 10px 8px 4px; border-top: 1px solid var(--line); }
+.notes h3 { margin: 0 0 6px; font-size: 13px; }
+.notes ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.close { min-height: 32px; padding: 4px 10px; font-size: 13px; color: var(--muted); }
+@media (max-width: 720px) {
+  .fixes { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: auto;
+    top: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-height: 46%; }
+}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
@@ -69,8 +103,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <div class="top">
   <div class="head card">
     <h1>わが家の3Dモデル</h1>
-    <p>間取り図から作成 · 外寸 <span class="num" id="dims"></span></p>
-    <p class="hint">ドラッグで回転 · 2本指で移動 · ピンチで拡大。図面に無い窓とドアは推定です。</p>
+    <p>改訂版の間取り図 ＋ 修正案 · 外寸 <span class="num" id="dims"></span></p>
+    <p class="hint">ドラッグで回転 · 2本指で移動 · ピンチで拡大。番号ピンが修正した箇所です。</p>
   </div>
 </div>
 
@@ -83,8 +117,23 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <button id="v-2f" aria-pressed="false">2F</button>
     </div>
     <button id="t-label" class="toggle" aria-pressed="true">部屋名</button>
+    <button id="t-fix" class="toggle" aria-pressed="true" aria-controls="fixes">修正点</button>
   </div>
 </div>
+
+<section class="fixes card" id="fixes" aria-label="修正点">
+  <header>
+    <h2>建築上の修正点 <span class="num" id="fix-count"></span></h2>
+    <button class="close" id="fix-close">閉じる</button>
+  </header>
+  <div class="scroll">
+    <div id="fix-list"></div>
+    <div class="notes">
+      <h3>設計者に確認したいこと</h3>
+      <ul id="note-list"></ul>
+    </div>
+  </div>
+</section>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -201,8 +250,40 @@ function buildLabels() {
     labelSprites.push(sp);
   }
 }
+const pinSprites = [];
+function makePin(n) {
+  const sz = 96, c = document.createElement('canvas');
+  c.width = c.height = sz;
+  const ctx = c.getContext('2d');
+  const pin = getComputedStyle(document.documentElement).getPropertyValue('--pin').trim() || '#d2552d';
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(sz / 2, sz / 2, sz / 2 - 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = pin;
+  ctx.beginPath(); ctx.arc(sz / 2, sz / 2, sz / 2 - 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 46px "IBM Plex Mono", ui-monospace, monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(n), sz / 2, sz / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(0.8, 0.8, 1);
+  sp.renderOrder = 11;
+  return sp;
+}
+function buildPins() {
+  for (const sp of pinSprites) sp.parent.remove(sp);
+  pinSprites.length = 0;
+  SCENE.fixes.forEach((f, i) => {
+    const sp = makePin(i + 1);
+    sp.position.set(...f.p);
+    group(f.g).add(sp);
+    pinSprites.push(sp);
+  });
+}
+function buildSprites() { buildLabels(); buildPins(); updateLabels(); }
 buildLabels();
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildLabels);
+buildPins();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildSprites);
 
 const [W, D] = SCENE.size;
 document.getElementById('dims').textContent = `${W.toFixed(2)} × ${D.toFixed(2)} m`;
@@ -245,6 +326,7 @@ function updateLabels() {
   for (const l of labelSprites) {
     l.visible = labelsOn && mode !== 'outside' && !(mode === '2f' && l.parent === groups['1F']);
   }
+  for (const p of pinSprites) p.visible = mode !== 'outside' && !(mode === '2f' && p.parent === groups['1F']);
 }
 for (const k of Object.keys(MODES)) document.getElementById('v-' + k).addEventListener('click', () => setMode(k));
 document.getElementById('t-label').addEventListener('click', (e) => {
@@ -254,16 +336,56 @@ document.getElementById('t-label').addEventListener('click', (e) => {
 });
 controls.addEventListener('start', () => { camTo = null; });
 
+// 修正点の一覧
+const panel = document.getElementById('fixes');
+const fixBtn = document.getElementById('t-fix');
+function showPanel(on) {
+  panel.hidden = !on;
+  fixBtn.setAttribute('aria-pressed', on);
+  resize();
+}
+fixBtn.addEventListener('click', () => showPanel(panel.hidden));
+document.getElementById('fix-close').addEventListener('click', () => showPanel(false));
+document.getElementById('fix-count').textContent = `${SCENE.fixes.length}件`;
+fixBtn.textContent = `修正点 ${SCENE.fixes.length}`;
+// スマホでは最初は閉じて、家全体を見せる
+if (host.clientWidth <= 720) showPanel(false);
+const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const list = document.getElementById('fix-list');
+SCENE.fixes.forEach((f, i) => {
+  const b = document.createElement('button');
+  b.className = 'fix';
+  b.innerHTML = `<span class="no">${i + 1}</span><span><b>${esc(f.title)}<span class="fl">${f.g}</span></b>`
+    + `<p><span class="b">図面</span>${esc(f.before)}</p><p><span class="a">修正</span>${esc(f.after)}</p></span>`;
+  b.addEventListener('click', () => {
+    for (const el of list.children) el.classList.toggle('active', el === b);
+    setMode(f.g === '1F' ? '1f' : '2f', false);
+    const t = new THREE.Vector3(...f.p);
+    t.y -= 1.4;
+    camTo = { pos: t.clone().add(new THREE.Vector3(3.2, 6.5, 6.2)), target: t, t: 0 };
+  });
+  list.appendChild(b);
+});
+document.getElementById('note-list').innerHTML = SCENE.notes.map((n) => `<li>${esc(n)}</li>`).join('');
+
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 camera.position.copy(camPos(MODES.explode));
 controls.target.set(...MODES.explode.target);
 setMode('explode', false);
 lift = LIFT;
 
+// 一覧パネルが開いているときは、残りの領域の中央に家が来るよう視野をずらす
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
+  let dx = 0, dy = 0;
+  if (!panel.hidden) {
+    const r = panel.getBoundingClientRect();
+    if (w > 720) dx = (r.width + 16) / 2;
+    else dy = (h - r.top) / 2 - 30;
+  }
+  camera.setViewOffset(w, h, dx, dy, w, h);
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);

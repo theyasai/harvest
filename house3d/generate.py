@@ -100,16 +100,50 @@ def add_wall(sc, g, w, base, height):
     seg(cur, end, 0, height, pad=t / 2)
 
 
+def add_back(sc, g, mat, f, base, top, default=None, thick=180):
+    """背もたれ。back は n/s/e/w (背もたれのある側)。省略時は長辺の北側か西側。"""
+    x, y, w, d, h = f["x"], f["y"], f["w"], f["d"], f["h"]
+    side = f.get("back") or default or ("n" if w >= d else "w")
+    x1, y1, x2, y2 = {
+        "n": (x, y, x + w, y + thick),
+        "s": (x, y + d - thick, x + w, y + d),
+        "w": (x, y, x + thick, y + d),
+        "e": (x + w - thick, y, x + w, y + d),
+    }[side]
+    sc.box(g, mat, x1, y1, x2, y2, base + h, base + top)
+
+
+def add_stair(sc, g, s, base, H):
+    """折り返し階段など。flight は rect 内に count 段、landing は riser 段目の高さの踊り場。"""
+    R = H / s["risers"]
+    for part in s["parts"]:
+        x1, y1, x2, y2 = part["rect"]
+        if part["type"] == "landing":
+            z = base + part["riser"] * R
+            sc.box(g, "stair", x1, y1, x2, y2, z - 200, z)
+            continue
+        dirn, n = part["dir"], part["count"]
+        run = (y2 - y1) if dirn in ("north", "south") else (x2 - x1)
+        t = run / n
+        for i in range(n):
+            z = base + (part["first"] + i) * R
+            a, b = i * t, (i + 1) * t
+            rect = {
+                "north": (x1, y2 - b, x2, y2 - a),
+                "south": (x1, y1 + a, x2, y1 + b),
+                "east": (x1 + a, y1, x1 + b, y2),
+                "west": (x2 - b, y1, x2 - a, y2),
+            }[dirn]
+            sc.box(g, "stair", *rect, z - 40, z)
+            sc.box(g, "stringer", *rect, max(base, z - 400), z - 40)
+
+
 def add_furniture(sc, g, f, base):
     x, y, w, d, h = f["x"], f["y"], f["w"], f["d"], f["h"]
     kind = f["kind"]
     if kind == "sofa":
         sc.box(g, "sofa", x, y, x + w, y + d, base, base + h, f["name"])
-        # 背もたれは長辺側の壁寄り
-        if w >= d:
-            sc.box(g, "sofa", x, y, x + w, y + 180, base + h, base + 750)
-        else:
-            sc.box(g, "sofa", x, y, x + 180, y + d, base + h, base + 750)
+        add_back(sc, g, "sofa", f, base, 750)
     elif kind == "table":
         sc.box(g, "table", x, y, x + w, y + d, base + h - 40, base + h, f["name"])
         for lx, ly in ((x + 40, y + 40), (x + w - 80, y + 40), (x + 40, y + d - 80), (x + w - 80, y + d - 80)):
@@ -118,7 +152,7 @@ def add_furniture(sc, g, f, base):
         sc.box(g, "round", x, y, x + w, y + d, base, base + h, f["name"])
     elif kind == "chair":
         sc.box(g, "chair", x, y, x + w, y + d, base, base + h, f["name"])
-        sc.box(g, "chair", x, y + d - 120, x + w, y + d, base + h, base + 850)
+        add_back(sc, g, "chair", f, base, 850, default="s", thick=120)
     else:
         sc.box(g, kind, x, y, x + w, y + d, base, base + h, f["name"])
 
@@ -137,7 +171,7 @@ def build(data):
             add_wall(sc, g, w, base, wall_h)
         for r in fl["rooms"]:
             poly = r.get("poly") or rect_poly(r["rect"])
-            cx, cy = centroid(poly)
+            cx, cy = r.get("label") or centroid(poly)
             sc.label(g, r["name"], cx, cy, base + 1200)
             if r.get("void"):
                 continue
@@ -149,18 +183,7 @@ def build(data):
             if top and not r.get("outdoor"):
                 sc.slab("roof", "roof", poly, r.get("holes", [])[:0], base + wall_h + SLAB, SLAB)
         for s in fl.get("stairs", []):
-            n = s["steps"]
-            tread = s["len"] / n
-            for k in range(n):
-                rise = (k + 1) * H / n
-                if s["dir"] == "west":
-                    x2 = s["x"] + s["len"] - k * tread
-                    x1 = x2 - tread
-                else:
-                    x1 = s["x"] + k * tread
-                    x2 = x1 + tread
-                sc.box(g, "stair", x1, s["y"], x2, s["y"] + s["w"], rise - 40, rise)
-                sc.box(g, "stringer", x1, s["y"], x2, s["y"] + s["w"], max(0, rise - 400), rise - 40)
+            add_stair(sc, g, s, base, H)
         for rl in fl.get("railings", []):
             (ax, ay), (bx, by) = rl["a"], rl["b"]
             sc.box(g, "frame", min(ax, bx) - 20, min(ay, by) - 20, max(ax, bx) + 20, max(ay, by) + 20,
@@ -170,6 +193,10 @@ def build(data):
         for f in fl.get("furniture", []):
             add_furniture(sc, g, f, base)
 
+    names = [f["name"] for f in data["floors"]]
+    fixes = [{"g": f["floor"], "title": f["title"], "before": f["before"], "after": f["after"],
+              "p": [mm(f["at"][0] - sc.ox), mm(names.index(f["floor"]) * H + 2200), mm(f["at"][1] - sc.oz)]}
+             for f in data.get("fixes", [])]
     # 敷地の地面
     sc.box("site", "ground", -1500, -1500, W + 1500, D + 1500, -100, -10)
     return {
@@ -180,6 +207,8 @@ def build(data):
         "boxes": sc.boxes,
         "slabs": sc.slabs,
         "labels": sc.labels,
+        "fixes": fixes,
+        "notes": data.get("notes", []),
     }
 
 
@@ -188,7 +217,7 @@ def check(data, images, out_dir):
     from PIL import Image, ImageDraw
 
     # (原点の画素, mm→px の倍率) — 2倍拡大した切り抜き画像に対する値
-    calib = {"1F": ((120, 130), (0.1168, 0.1193)), "2F": ((100, 140), (0.1181, 0.1180))}
+    calib = {"1F": ((25, 22), (0.1166, 0.1187)), "2F": ((18, 25), (0.1181, 0.1180))}
     for fl, path in zip(data["floors"], images):
         (px0, py0), (kx, ky) = calib[fl["name"]]
         im = Image.open(path).convert("RGB")

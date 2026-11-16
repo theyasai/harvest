@@ -2,6 +2,7 @@
 
 使い方:
     python3 generate.py                     # scene.json と index.html を出力
+    python3 generate.py coords_hiraya.json  # scene_hiraya.json と hiraya.html を出力
     python3 generate.py --check 1F.png 2F.png OUT_DIR
         図面画像に生成した壁を赤線で重ねた確認画像を出力 (差分チェック用)
 """
@@ -20,6 +21,10 @@ def mm(v):
 def rect_poly(r):
     x1, y1, x2, y2 = r
     return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+
+
+def area(poly):
+    return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]))) / 2
 
 
 def centroid(poly):
@@ -139,6 +144,7 @@ def add_stair(sc, g, s, base, H):
 
 
 def add_furniture(sc, g, f, base):
+    base += f.get("z", 0)
     x, y, w, d, h = f["x"], f["y"], f["w"], f["d"], f["h"]
     kind = f["kind"]
     if kind == "sofa":
@@ -148,6 +154,12 @@ def add_furniture(sc, g, f, base):
         sc.box(g, "table", x, y, x + w, y + d, base + h - 40, base + h, f["name"])
         for lx, ly in ((x + 40, y + 40), (x + w - 80, y + 40), (x + 40, y + d - 80), (x + w - 80, y + d - 80)):
             sc.box(g, "table", lx, ly, lx + 40, ly + 40, base, base + h - 40)
+    elif kind == "car":
+        # 車体と、少し短い客室
+        sc.box(g, "car", x, y, x + w, y + d, base + 150, base + 800, f["name"])
+        sc.box(g, "glass", x + 80, y + d * 0.3, x + w - 80, y + d * 0.75, base + 800, base + h)
+        for wy in (y + 500, y + d - 900):
+            sc.box(g, "frame", x - 20, wy, x + w + 20, wy + 600, base, base + 450)
     elif kind == "round":
         sc.box(g, "round", x, y, x + w, y + d, base, base + h, f["name"])
     elif kind == "chair":
@@ -172,7 +184,8 @@ def build(data):
         for r in fl["rooms"]:
             poly = r.get("poly") or rect_poly(r["rect"])
             cx, cy = r.get("label") or centroid(poly)
-            sc.label(g, r["name"], cx, cy, base + 1200)
+            name = r["name"] + (f" {area(poly) / 1.62e6:.1f}帖" if r.get("jo") else "")
+            sc.label(g, name, cx, cy, base + 1200)
             if r.get("void"):
                 continue
             mat = r.get("floor", "wood")
@@ -197,8 +210,17 @@ def build(data):
     fixes = [{"g": f["floor"], "title": f["title"], "before": f["before"], "after": f["after"],
               "p": [mm(f["at"][0] - sc.ox), mm(names.index(f["floor"]) * H + 2200), mm(f["at"][1] - sc.oz)]}
              for f in data.get("fixes", [])]
-    # 敷地の地面
-    sc.box("site", "ground", -1500, -1500, W + 1500, D + 1500, -100, -10)
+    # 敷地の地面と外構
+    site = data.get("site", {})
+    sx1, sy1, sx2, sy2 = site.get("rect", [-1500, -1500, W + 1500, D + 1500])
+    sc.box("site", "ground", sx1, sy1, sx2, sy2, -100, -10)
+    for pad in site.get("pads", []):
+        x1, y1, x2, y2 = pad["rect"]
+        sc.box("site", pad["floor"], x1, y1, x2, y2, -40, 5)
+        if pad.get("name"):
+            sc.label("site", pad["name"], (x1 + x2) / 2, (y1 + y2) / 2, 600)
+    for f in site.get("furniture", []):
+        add_furniture(sc, "site", f, 0)
     return {
         "unit": "m",
         "size": [mm(W), mm(D)],
@@ -209,6 +231,7 @@ def build(data):
         "labels": sc.labels,
         "fixes": fixes,
         "notes": data.get("notes", []),
+        "meta": data.get("meta", {}),
     }
 
 
@@ -239,15 +262,22 @@ def check(data, images, out_dir):
 
 
 def main():
-    data = json.loads((HERE / "coords.json").read_text(encoding="utf-8"))
+    if len(sys.argv) > 1 and sys.argv[1] != "--check":
+        src = Path(sys.argv[1])
+    else:
+        src = HERE / "coords.json"
+    data = json.loads(src.read_text(encoding="utf-8"))
+    # coords.json → scene.json / index.html、coords_xxx.json → scene_xxx.json / xxx.html
+    suffix = src.stem.removeprefix("coords")
+    out_html = HERE / (f"{suffix[1:]}.html" if suffix else "index.html")
     if len(sys.argv) > 1 and sys.argv[1] == "--check":
         check(data, sys.argv[2:4], sys.argv[4])
         return
     scene = build(data)
     text = json.dumps(scene, ensure_ascii=False, separators=(",", ":"))
-    (HERE / "scene.json").write_text(text, encoding="utf-8")
+    (HERE / f"scene{suffix}.json").write_text(text, encoding="utf-8")
     html = (HERE / "viewer_template.html").read_text(encoding="utf-8")
-    (HERE / "index.html").write_text(html.replace("/*SCENE_JSON*/null", text), encoding="utf-8")
+    out_html.write_text(html.replace("/*SCENE_JSON*/null", text), encoding="utf-8")
     print(f"boxes={len(scene['boxes'])} slabs={len(scene['slabs'])} labels={len(scene['labels'])}")
 
 

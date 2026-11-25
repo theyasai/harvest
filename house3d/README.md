@@ -30,3 +30,13 @@
 - 中庭を家の真ん中に置き、廊下・和室・LDK・土間で囲むロの字型
 - 外寸 15.47×12.74m、延床 約161m²（約49坪）、敷地 約20.5×21.7m（約135坪）、駐車場2台
 - 部屋名に `"jo": true` を付けると、面積から計算した帖数を表示します
+
+## CGパース
+
+`render_perspective.py` は、シーンJSONをBlenderに読み込んでCyclesでレンダリングします。カメラは座標表の `meta.cameras` で指定します（`eye`・`target` はBlender座標で、建物の中心が原点、x=東、y=北、z=上、単位m）。
+
+```
+blender -b -P render_perspective.py -- scene_hiraya.json renders 96
+```
+
+`renders/` にパース画像と、他のソフトに読み込める `hiraya.glb` があります。
